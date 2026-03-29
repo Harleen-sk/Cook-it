@@ -1,0 +1,31 @@
+version: '3.8'
+
+services:
+  # Backend FastAPI
+  backend:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+    environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+    networks:
+      - app-network
+
+  # Frontend Expo (Mode Web pour le développement facile sous Docker)
+  frontend:
+    build: ./frontend
+    ports:
+      - "19006:19006"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules # Important : empêche Docker d'écraser les modules installés dans l'image
+    stdin_open: true # Permet l'interaction avec le terminal Expo
+    tty: true
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge
