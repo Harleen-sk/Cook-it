@@ -21,6 +21,12 @@ expo-env.d.ts
 # Metro
 .metro-health-check*
 
+# python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
 # debug
 npm-debug.*
 yarn-debug.*

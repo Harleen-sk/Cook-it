@@ -18,9 +18,12 @@ services:
     build: ./frontend
     ports:
       - "19006:19006"
+      - "8081:8081"
     volumes:
       - ./frontend:/app
       - /app/node_modules # Important : empêche Docker d'écraser les modules installés dans l'image
+    environment:
+      - REACT_NATIVE_PACKAGER_HOSTNAME=10.110.228.127
     stdin_open: true # Permet l'interaction avec le terminal Expo
     tty: true
     networks:
