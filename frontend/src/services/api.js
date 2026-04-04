@@ -8,12 +8,15 @@ export const ingredientService = {
     return await response.json();
   },
 
-  // Ajouter un ingrédient
   create: async (ingredientData) => {
     const response = await fetch(`${BASE_URL}/ingredients`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(ingredientData),
+      body: JSON.stringify({
+        name: ingredientData.name,
+        quantity: ingredientData.quantity,
+        unit: ingredientData.unit || "pcs",
+      }),
     });
     return await response.json();
   },

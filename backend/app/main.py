@@ -9,6 +9,8 @@ models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="Veggie Planner API")
 
+STAPLES_LIST = ["salt", "pepper", "olive oil", "sugar", "flour", "vinegar", "garlic powder"]
+
 # Fonction pour obtenir une connexion à la base de données
 def get_db():
     db = SessionLocal()
@@ -34,8 +36,16 @@ def create_ingredient(ingredient: schemas.IngredientCreate, db: Session = Depend
     if db_ingredient:
         raise HTTPException(status_code=400, detail="Ingredient already exists")
     
+    is_staple_auto = ingredient.name.lower() in STAPLES_LIST
+    
     # Création de l'objet pour la base de données
-    new_ingredient = models.Ingredient(**ingredient.dict())
+    new_ingredient = models.Ingredient(
+        name=ingredient.name.lower(),
+        quantity=ingredient.quantity,
+        unit=ingredient.unit,
+        is_staple=is_staple_auto  # Le système décide ici
+    )
+    
     db.add(new_ingredient)
     db.commit()
     db.refresh(new_ingredient)
