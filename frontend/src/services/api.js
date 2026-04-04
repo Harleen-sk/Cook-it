@@ -50,3 +50,10 @@ export const equipmentService = {
     return await response.json();
   }
 };
+
+export const aiService = {
+  getSuggestions: async () => {
+    const response = await fetch(`${BASE_URL}/generate-ideas`);
+    return await response.json();
+  }
+};

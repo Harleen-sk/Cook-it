@@ -82,3 +82,33 @@ def toggle_equipment(eq_id: int, db: Session = Depends(get_db)):
     db_eq.is_active = not db_eq.is_active
     db.commit()
     return db_eq
+
+@app.get("/generate-ideas")
+def get_cooking_context(db: Session = Depends(get_db)):
+    # On récupère tout ce qui est disponible
+    ingredients = db.query(models.Ingredient).all()
+    equipment = db.query(models.Equipment).filter(models.Equipment.is_active == True).all()
+    
+    # On prépare un dictionnaire "contexte" pour l'IA
+    context = {
+        "pantry": [ing.name for ing in ingredients],
+        "kitchen_tools": [eq.name for eq in equipment]
+    }
+    
+    # Pour l'instant, on simule une réponse de l'IA
+    # Plus tard, on connectera ici l'API OpenAI ou Gemini
+    suggestions = [
+        {
+            "id": 1,
+            "title": "Poêlée printanière",
+            "description": "Utilise vos légumes frais avec votre poêle active.",
+            "score": "90% match"
+        },
+        {
+            "id": 2,
+            "title": "Soupe réconfortante",
+            "description": "Parfait si vous avez un mixeur et des oignons.",
+            "score": "75% match"
+        }
+      ]
+    return {"context": context, "suggestions": suggestions}

@@ -1,29 +1,44 @@
 import React, { useEffect, useState } from 'react';
 import { 
-  StyleSheet, Text, View, FlatList, TextInput, 
-  TouchableOpacity, SafeAreaView, KeyboardAvoidingView, 
-  Platform, ActivityIndicator, Alert, ScrollView
+  StyleSheet, 
+  Text, 
+  View, 
+  FlatList, 
+  TextInput, 
+  TouchableOpacity, 
+  SafeAreaView, 
+  KeyboardAvoidingView, 
+  Platform, 
+  ActivityIndicator, 
+  Alert,
+  Dimensions
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { ingredientService, equipmentService } from './src/services/api';
+
+// Importation de nos services
+import { ingredientService, equipmentService, aiService } from './src/services/api';
+
+const { width } = Dimensions.get('window');
 
 export default function App() {
   // --- NAVIGATION ---
-  const [currentScreen, setCurrentScreen] = useState('pantry'); // 'pantry' ou 'equipment'
+  const [currentScreen, setCurrentScreen] = useState('pantry'); // 'pantry' | 'equipment' | 'suggestions'
 
-  // --- ÉTATS INGRÉDIENTS ---
+  // --- ÉTATS DONNÉES ---
   const [ingredients, setIngredients] = useState([]);
+  const [equipments, setEquipments] = useState([]);
+  const [suggestions, setSuggestions] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  // --- ÉTATS FORMULAIRES ---
   const [ingName, setIngName] = useState('');
   const [ingQty, setIngQty] = useState('');
   const [ingUnit, setIngUnit] = useState('pcs');
-
-  // --- ÉTATS ÉQUIPEMENT ---
-  const [equipments, setEquipments] = useState([]);
   const [eqName, setEqName] = useState('');
 
-  const [loading, setLoading] = useState(true);
+  const availableUnits = ['pcs', 'g', 'kg', 'ml', 'l'];
 
-  // --- CHARGEMENT DES DONNÉES ---
+  // --- CHARGEMENT INITIAL ---
   const loadAllData = async () => {
     setLoading(true);
     try {
@@ -34,30 +49,36 @@ export default function App() {
       setIngredients(ingData);
       setEquipments(eqData);
       
-      // LOGIQUE NOUVEL UTILISATEUR :
-      // Si aucun équipement n'est enregistré, on force la page équipement
-      if (eqData.length === 0) {
+      // Si c'est un nouvel utilisateur (pas d'équipement), on l'envoie configurer sa cuisine
+      if (eqData.length === 0 && currentScreen === 'pantry') {
         setCurrentScreen('equipment');
       }
     } catch (error) {
-      console.error(error);
+      console.error("Erreur de synchro:", error);
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => { loadAllData(); }, []);
+  useEffect(() => {
+    loadAllData();
+  }, []);
 
-  // --- ACTIONS INGRÉDIENTS ---
+  // --- LOGIQUE INGRÉDIENTS ---
   const handleAddIngredient = async () => {
     if (!ingName || !ingQty) return;
-    const result = await ingredientService.create({ name: ingName, quantity: parseFloat(ingQty), unit: ingUnit });
+    const result = await ingredientService.create({ 
+      name: ingName, 
+      quantity: parseFloat(ingQty), 
+      unit: ingUnit 
+    });
     if (result && !result.detail) {
-      setIngName(''); setIngQty(''); loadAllData();
+      setIngName(''); setIngQty(''); setIngUnit('pcs');
+      loadAllData();
     }
   };
 
-  // --- ACTIONS ÉQUIPEMENT ---
+  // --- LOGIQUE ÉQUIPEMENT ---
   const handleAddEquipment = async () => {
     if (!eqName) return;
     const result = await equipmentService.create(eqName);
@@ -74,37 +95,74 @@ export default function App() {
     }
   };
 
-  // --- RENDU DES ÉCRANS ---
+  // --- LOGIQUE IA ---
+  const handleGenerateRecipes = async () => {
+    setLoading(true);
+    try {
+      const data = await aiService.getSuggestions();
+      setSuggestions(data.suggestions);
+      setCurrentScreen('suggestions');
+    } catch (e) {
+      Alert.alert("Erreur", "Impossible de contacter l'IA.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // --- RENDUS D'ÉCRANS ---
 
   const renderPantry = () => (
     <View style={{ flex: 1 }}>
       <View style={styles.header}>
-        <Text style={styles.title}>My Pantry</Text>
-        <Text style={styles.subtitle}>Your ingredients for AI planning</Text>
+        <View style={styles.headerRow}>
+          <Text style={styles.title}>My Pantry</Text>
+          <TouchableOpacity style={styles.settingsBtn} onPress={() => setCurrentScreen('equipment')}>
+            <Ionicons name="cog-outline" size={22} color="#666" />
+          </TouchableOpacity>
+        </View>
+        <Text style={styles.subtitle}>Manage your stock for AI cooking</Text>
       </View>
 
       <FlatList
         data={[
-          { title: 'Fresh', data: ingredients.filter(i => !i.is_staple) },
-          { title: 'Basics', data: ingredients.filter(i => i.is_staple) }
+          { title: 'Fresh Ingredients', data: ingredients.filter(i => !i.is_staple) },
+          { title: 'Basics & Staples', data: ingredients.filter(i => i.is_staple) }
         ]}
         contentContainerStyle={styles.listContent}
+        keyExtractor={(item) => item.title}
         renderItem={({ item }) => (
           <View style={styles.sectionContainer}>
             <Text style={styles.sectionTitle}>{item.title}</Text>
-            {item.data.map(ing => (
-              <View key={ing.id} style={styles.card}>
-                <Text style={styles.cardText}>{ing.name} ({ing.quantity} {ing.unit})</Text>
-                <TouchableOpacity onPress={() => ingredientService.delete(ing.id).then(loadAllData)}>
-                  <Ionicons name="trash-outline" size={20} color="#FF4444" />
-                </TouchableOpacity>
-              </View>
-            ))}
+            {item.data.length === 0 ? <Text style={styles.emptyText}>Empty</Text> : 
+              item.data.map(ing => (
+                <View key={ing.id} style={styles.card}>
+                  <View>
+                    <Text style={styles.cardMainText}>{ing.name}</Text>
+                    <Text style={styles.cardSubText}>{ing.quantity} {ing.unit}</Text>
+                  </View>
+                  <TouchableOpacity onPress={() => ingredientService.delete(ing.id).then(loadAllData)}>
+                    <Ionicons name="trash-outline" size={18} color="#FF4444" />
+                  </TouchableOpacity>
+                </View>
+              ))
+            }
           </View>
         )}
       />
 
+      {/* BOUTON GÉNÉRER ✨ */}
+      <TouchableOpacity style={styles.generateFab} onPress={handleGenerateRecipes}>
+        <Text style={styles.generateFabText}>✨ Generate Ideas</Text>
+      </TouchableOpacity>
+
       <View style={styles.footer}>
+        <View style={styles.unitSelector}>
+          {availableUnits.map(u => (
+            <TouchableOpacity key={u} style={[styles.unitBadge, ingUnit === u && styles.unitBadgeActive]} onPress={() => setIngUnit(u)}>
+              <Text style={[styles.unitText, ingUnit === u && styles.unitTextActive]}>{u}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
         <View style={styles.inputContainer}>
           <TextInput style={[styles.input, { flex: 2 }]} placeholder="Ingredient..." value={ingName} onChangeText={setIngName} />
           <TextInput style={[styles.input, { flex: 1 }]} placeholder="Qty" keyboardType="numeric" value={ingQty} onChangeText={setIngQty} />
@@ -119,12 +177,12 @@ export default function App() {
   const renderEquipment = () => (
     <View style={{ flex: 1 }}>
       <View style={styles.header}>
-        <Text style={styles.title}>Equipment</Text>
-        <Text style={styles.subtitle}>What tools are in your kitchen?</Text>
+        <Text style={styles.title}>Kitchen Tools</Text>
+        <Text style={styles.subtitle}>Select or add what you have at home</Text>
       </View>
-
       <FlatList
         data={equipments}
+        keyExtractor={(item) => item.id.toString()}
         contentContainerStyle={styles.listContent}
         renderItem={({ item }) => (
           <TouchableOpacity 
@@ -132,45 +190,66 @@ export default function App() {
             onPress={() => handleToggleEquipment(item.id)}
           >
             <Text style={[styles.eqText, !item.is_active && styles.eqTextInactive]}>{item.name}</Text>
-            <Ionicons 
-              name={item.is_active ? "checkmark-circle" : "ellipse-outline"} 
-              size={24} 
-              color={item.is_active ? "#1A1A1A" : "#CCC"} 
-            />
+            <Ionicons name={item.is_active ? "checkmark-circle" : "ellipse-outline"} size={24} color={item.is_active ? "#1A1A1A" : "#DDD"} />
           </TouchableOpacity>
         )}
       />
-
       <View style={styles.footer}>
         <View style={styles.inputContainer}>
-          <TextInput style={[styles.input, { flex: 1 }]} placeholder="Ex: Oven, Blender..." value={eqName} onChangeText={setEqName} />
+          <TextInput style={[styles.input, { flex: 1 }]} placeholder="Add tool (Oven, Pan...)" value={eqName} onChangeText={setEqName} />
           <TouchableOpacity style={styles.addButton} onPress={handleAddEquipment}>
             <Ionicons name="add" size={24} color="white" />
           </TouchableOpacity>
         </View>
-        {equipments.length > 0 && (
-          <TouchableOpacity style={styles.doneButton} onPress={() => setCurrentScreen('pantry')}>
-            <Text style={styles.doneButtonText}>Go to my Pantry</Text>
-          </TouchableOpacity>
-        )}
+        <TouchableOpacity style={styles.doneBtn} onPress={() => setCurrentScreen('pantry')}>
+          <Text style={styles.doneBtnText}>Go to Pantry</Text>
+        </TouchableOpacity>
       </View>
+    </View>
+  );
+
+  const renderSuggestions = () => (
+    <View style={{ flex: 1 }}>
+      <View style={styles.header}>
+        <Text style={styles.title}>💡 AI Suggestions</Text>
+        <Text style={styles.subtitle}>Recipes matching your inventory</Text>
+      </View>
+      <FlatList
+        data={suggestions}
+        keyExtractor={(item) => item.id.toString()}
+        contentContainerStyle={styles.listContent}
+        renderItem={({ item }) => (
+          <View style={styles.recipeCard}>
+            <View style={styles.recipeHeader}>
+              <Text style={styles.recipeTitle}>{item.title}</Text>
+              <Text style={styles.recipeScore}>{item.score}</Text>
+            </View>
+            <Text style={styles.recipeDesc}>{item.description}</Text>
+            <TouchableOpacity style={styles.recipeBtn}>
+              <Text style={styles.recipeBtnText}>See details</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+      />
+      <TouchableOpacity style={styles.backFab} onPress={() => setCurrentScreen('pantry')}>
+        <Ionicons name="arrow-back" size={20} color="white" />
+        <Text style={{color: 'white', fontWeight: '700', marginLeft: 8}}>Back</Text>
+      </TouchableOpacity>
     </View>
   );
 
   return (
     <SafeAreaView style={styles.container}>
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1 }}>
-        
-        {loading ? <ActivityIndicator size="large" color="#000" /> : (
-          currentScreen === 'pantry' ? renderPantry() : renderEquipment()
-        )}
-
-        {/* PETIT MENU DE NAVIGATION EN BAS (NOTION STYLE) */}
-        {currentScreen === 'pantry' && (
-          <TouchableOpacity style={styles.navToggle} onPress={() => setCurrentScreen('equipment')}>
-            <Ionicons name="settings-outline" size={20} color="#666" />
-            <Text style={styles.navToggleText}>Kitchen Settings</Text>
-          </TouchableOpacity>
+        {loading ? (
+          <View style={styles.centered}>
+            <ActivityIndicator size="large" color="#1A1A1A" />
+            <Text style={{marginTop: 10, color: '#AAA'}}>Cooking something special...</Text>
+          </View>
+        ) : (
+          currentScreen === 'pantry' ? renderPantry() : 
+          currentScreen === 'equipment' ? renderEquipment() : 
+          renderSuggestions()
         )}
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -179,31 +258,51 @@ export default function App() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#FFFFFF' },
+  centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   header: { padding: 25, paddingTop: 10 },
-  title: { fontSize: 28, fontWeight: '800' },
-  subtitle: { fontSize: 14, color: '#AAA' },
-  listContent: { paddingHorizontal: 25, paddingBottom: 150 },
+  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  title: { fontSize: 28, fontWeight: '800', letterSpacing: -0.5 },
+  subtitle: { fontSize: 14, color: '#AAA', marginTop: 4 },
+  settingsBtn: { backgroundColor: '#F5F5F5', padding: 8, borderRadius: 12 },
   
-  // Styles Ingrédients
-  sectionContainer: { marginBottom: 20 },
-  sectionTitle: { fontSize: 12, fontWeight: '700', color: '#CCC', textTransform: 'uppercase', marginBottom: 10 },
-  card: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 12, borderBottomWidth: 0.5, borderBottomColor: '#EEE' },
-  cardText: { fontSize: 16, color: '#333' },
-
-  // Styles Équipements
-  eqCard: { flexDirection: 'row', justifyContent: 'space-between', padding: 20, backgroundColor: '#F9F9F9', borderRadius: 12, marginBottom: 10 },
-  eqCardInactive: { opacity: 0.5, backgroundColor: '#FFF', borderWidth: 1, borderColor: '#EEE' },
-  eqText: { fontSize: 16, fontWeight: '600' },
+  listContent: { paddingHorizontal: 25, paddingBottom: 180 },
+  sectionContainer: { marginBottom: 25 },
+  sectionTitle: { fontSize: 12, fontWeight: '700', color: '#CCC', textTransform: 'uppercase', marginBottom: 10, letterSpacing: 1 },
+  
+  card: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 15, borderBottomWidth: 0.5, borderBottomColor: '#F0F0F0' },
+  cardMainText: { fontSize: 16, fontWeight: '600', textTransform: 'capitalize' },
+  cardSubText: { fontSize: 12, color: '#999', marginTop: 2 },
+  
+  eqCard: { flexDirection: 'row', justifyContent: 'space-between', padding: 18, backgroundColor: '#F9F9F9', borderRadius: 14, marginBottom: 12 },
+  eqCardInactive: { opacity: 0.4, backgroundColor: '#FFF', borderWidth: 1, borderColor: '#EEE' },
+  eqText: { fontSize: 16, fontWeight: '600', textTransform: 'capitalize' },
   eqTextInactive: { color: '#AAA', textDecorationLine: 'line-through' },
 
-  footer: { position: 'absolute', bottom: 0, width: '100%', padding: 20, backgroundColor: '#FFF', borderTopWidth: 1, borderTopColor: '#F5F5F5' },
+  footer: { position: 'absolute', bottom: 0, width: '100%', padding: 20, paddingBottom: Platform.OS === 'ios' ? 40 : 20, backgroundColor: '#FFF', borderTopWidth: 1, borderTopColor: '#F5F5F5' },
   inputContainer: { flexDirection: 'row', gap: 10 },
-  input: { backgroundColor: '#F5F5F5', padding: 12, borderRadius: 10 },
-  addButton: { backgroundColor: '#1A1A1A', width: 50, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
+  input: { backgroundColor: '#F5F5F5', padding: 12, borderRadius: 12, fontSize: 15 },
+  addButton: { backgroundColor: '#1A1A1A', width: 52, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
   
-  doneButton: { backgroundColor: '#F0F9F0', padding: 15, borderRadius: 10, marginTop: 10, alignItems: 'center' },
-  doneButtonText: { color: '#2D5A27', fontWeight: '700' },
+  unitSelector: { flexDirection: 'row', marginBottom: 12, gap: 8 },
+  unitBadge: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, backgroundColor: '#F5F5F5' },
+  unitBadgeActive: { backgroundColor: '#1A1A1A' },
+  unitText: { fontSize: 11, fontWeight: '700', color: '#AAA' },
+  unitTextActive: { color: '#FFF' },
 
-  navToggle: { position: 'absolute', top: 30, right: 20, flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: '#F5F5F5', padding: 8, borderRadius: 20 },
-  navToggleText: { fontSize: 12, color: '#666', fontWeight: '600' }
+  generateFab: { position: 'absolute', bottom: 130, right: 20, backgroundColor: '#1A1A1A', paddingHorizontal: 20, paddingVertical: 14, borderRadius: 30, flexDirection: 'row', alignItems: 'center', elevation: 5, shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 10 },
+  generateFabText: { color: 'white', fontWeight: '800', fontSize: 15 },
+  
+  backFab: { position: 'absolute', bottom: 30, alignSelf: 'center', backgroundColor: '#666', paddingHorizontal: 25, paddingVertical: 12, borderRadius: 25, flexDirection: 'row', alignItems: 'center' },
+  
+  recipeCard: { backgroundColor: '#F9F9F9', borderRadius: 18, padding: 20, marginBottom: 15, borderWidth: 1, borderColor: '#F0F0F0' },
+  recipeHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 },
+  recipeTitle: { fontSize: 18, fontWeight: '700' },
+  recipeScore: { color: '#4CAF50', fontWeight: '800', fontSize: 12 },
+  recipeDesc: { color: '#666', fontSize: 14, lineHeight: 20, marginBottom: 15 },
+  recipeBtn: { backgroundColor: '#1A1A1A', padding: 12, borderRadius: 10, alignItems: 'center' },
+  recipeBtnText: { color: 'white', fontWeight: '700' },
+  
+  doneBtn: { backgroundColor: '#F0F9F0', padding: 15, borderRadius: 12, marginTop: 12, alignItems: 'center' },
+  doneBtnText: { color: '#2D5A27', fontWeight: '700' },
+  emptyText: { color: '#DDD', fontStyle: 'italic', marginVertical: 10 }
 });
