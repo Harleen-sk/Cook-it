@@ -63,3 +63,22 @@ def delete_ingredient(ingredient_id: int, db: Session = Depends(get_db)):
     db.delete(db_ingredient)
     db.commit()
     return {"message": "Ingredient deleted successfully"}
+
+@app.get("/equipments", response_model=list[schemas.Equipment])
+def get_equipments(db: Session = Depends(get_db)):
+    return db.query(models.Equipment).all()
+
+@app.post("/equipments", response_model=schemas.Equipment)
+def create_equipment(equipment: schemas.EquipmentCreate, db: Session = Depends(get_db)):
+    db_eq = models.Equipment(name=equipment.name.lower(), is_active=True)
+    db.add(db_eq)
+    db.commit()
+    db.refresh(db_eq)
+    return db_eq
+
+@app.patch("/equipments/{eq_id}") # Pour basculer l'état On/Off
+def toggle_equipment(eq_id: int, db: Session = Depends(get_db)):
+    db_eq = db.query(models.Equipment).filter(models.Equipment.id == eq_id).first()
+    db_eq.is_active = not db_eq.is_active
+    db.commit()
+    return db_eq

@@ -29,3 +29,24 @@ export const ingredientService = {
     return response.ok;
   }
 };
+
+export const equipmentService = {
+  getAll: async () => {
+    const response = await fetch(`${BASE_URL}/equipments`);
+    return await response.json();
+  },
+  create: async (name) => {
+    const response = await fetch(`${BASE_URL}/equipments`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: name }),
+    });
+    return await response.json();
+  },
+  toggle: async (id) => {
+    const response = await fetch(`${BASE_URL}/equipments/${id}`, {
+      method: 'PATCH',
+    });
+    return await response.json();
+  }
+};

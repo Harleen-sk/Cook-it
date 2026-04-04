@@ -15,3 +15,16 @@ class Ingredient(IngredientCreate):
 
     class Config:
         from_attributes = True # Converts SQLAlchemy objects to JSON
+
+
+class EquipmentBase(BaseModel):
+    name: str
+    is_active: bool = True
+
+class EquipmentCreate(EquipmentBase):
+    pass
+
+class Equipment(EquipmentBase):
+    id: int
+    class Config:
+        from_attributes = True

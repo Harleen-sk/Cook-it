@@ -17,3 +17,9 @@ class Equipment(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, unique=True)
     is_active = Column(Boolean, default=True) # "Je ne veux pas utiliser le four aujourd'hui"
+
+class Equipment(Base):
+    __tablename__ = "equipments"
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, unique=True, index=True)
+    is_active = Column(Boolean, default=True) # Pour savoir si on peut l'utiliser
