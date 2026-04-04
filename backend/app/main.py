@@ -36,13 +36,15 @@ def create_ingredient(ingredient: schemas.IngredientCreate, db: Session = Depend
     if db_ingredient:
         raise HTTPException(status_code=400, detail="Ingredient already exists")
     
+    name_lower = ingredient.name.lower()
+
     is_staple_auto = ingredient.name.lower() in STAPLES_LIST
     
     # Création de l'objet pour la base de données
     new_ingredient = models.Ingredient(
         name=ingredient.name.lower(),
         quantity=ingredient.quantity,
-        unit=ingredient.unit,
+        unit=ingredient.unit if ingredient.unit else "pcs",
         is_staple=is_staple_auto  # Le système décide ici
     )
     

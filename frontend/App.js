@@ -23,6 +23,8 @@ export default function App() {
   const [name, setName] = useState('');
   const [quantity, setQuantity] = useState('');
   const [loading, setLoading] = useState(true);
+  const [unit, setUnit] = useState('pcs');
+  const units = ['pcs', 'g', 'kg', 'ml', 'l'];
 
   // --- LOGIQUE (FUNCTIONS) ---
 
@@ -50,7 +52,7 @@ export default function App() {
     const newIngredient = {
       name: name.trim(),
       quantity: parseFloat(quantity),
-      unit: "pcs"
+      unit: unit
     };
 
     const result = await ingredientService.create(newIngredient);
@@ -125,6 +127,19 @@ export default function App() {
 
         {/* Formulaire de saisie simplifié */}
         <View style={styles.footer}>
+
+          <View style={styles.unitSelector}>
+            {units.map((u) => (
+              <TouchableOpacity 
+                key={u} 
+                style={[styles.unitBadge, unit === u && styles.unitBadgeActive]}
+                onPress={() => setUnit(u)}
+              >
+                <Text style={[styles.unitText, unit === u && styles.unitTextActive]}>{u}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
           <View style={styles.inputContainer}>
             <TextInput 
               style={[styles.input, { flex: 2 }]} 
@@ -187,6 +202,28 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFF',
     borderTopWidth: 1,
     borderTopColor: '#F5F5F5',
+  },
+  unitSelector: { 
+    flexDirection: 'row', 
+    marginBottom: 10, 
+    gap: 8 
+  },
+  unitBadge: { 
+    paddingHorizontal: 12, 
+    paddingVertical: 4, 
+    borderRadius: 20, 
+    backgroundColor: '#F0F0F0' 
+  },
+  unitBadgeActive: { 
+    backgroundColor: '#1A1A1A' 
+  },
+  unitText: { 
+    fontSize: 12, 
+    color: '#666' 
+  },
+  unitTextActive: { 
+    color: '#FFF', 
+    fontWeight: '600' 
   },
   inputContainer: { flexDirection: 'row', gap: 10 },
   input: {
