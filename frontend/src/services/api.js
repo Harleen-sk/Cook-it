@@ -52,8 +52,30 @@ export const equipmentService = {
 };
 
 export const aiService = {
+  // Fonction pour les 3 idées de base
   getSuggestions: async () => {
-    const response = await fetch(`${BASE_URL}/generate-ideas`);
-    return await response.json();
+    try {
+      const response = await fetch(`${BASE_URL}/generate-ideas`);
+      return await response.json();
+    } catch (error) {
+      console.error("Erreur suggestions:", error);
+      throw error;
+    }
+  },
+
+  // Fonction pour le détail complet (Celle qui manquait à l'objet)
+  getRecipeDetails: async (recipeTitle) => {
+    try {
+      const response = await fetch(`${BASE_URL}/recipe-details?title=${encodeURIComponent(recipeTitle)}`);
+      
+      if (!response.ok) {
+        throw new Error(`Erreur HTTP: ${response.status}`);
+      }
+      
+      return await response.json();
+    } catch (error) {
+      console.error("Erreur détails recette:", error);
+      throw error; // On propage l'erreur pour que l'App.js la capture
+    }
   }
 };

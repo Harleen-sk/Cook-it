@@ -12,13 +12,6 @@ class Ingredient(Base):
     is_in_shopping_list = Column(Boolean, default=False)
 
 class Equipment(Base):
-    __tablename__ = "equipment"
-
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, unique=True)
-    is_active = Column(Boolean, default=True) # "Je ne veux pas utiliser le four aujourd'hui"
-
-class Equipment(Base):
     __tablename__ = "equipments"
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, unique=True, index=True)

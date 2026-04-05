@@ -11,24 +11,31 @@ import {
   Platform, 
   ActivityIndicator, 
   Alert,
-  Dimensions
+  Dimensions,
+  Modal,
+  ScrollView
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 // Importation de nos services
 import { ingredientService, equipmentService, aiService } from './src/services/api';
 
-const { width } = Dimensions.get('window');
+const { width, height } = Dimensions.get('window');
 
 export default function App() {
   // --- NAVIGATION ---
-  const [currentScreen, setCurrentScreen] = useState('pantry'); // 'pantry' | 'equipment' | 'suggestions'
+  const [currentScreen, setCurrentScreen] = useState('pantry'); 
 
   // --- ÉTATS DONNÉES ---
   const [ingredients, setIngredients] = useState([]);
   const [equipments, setEquipments] = useState([]);
   const [suggestions, setSuggestions] = useState([]);
   const [loading, setLoading] = useState(true);
+  
+  // --- ÉTATS RECETTE DÉTAILLÉE ---
+  const [selectedRecipe, setSelectedRecipe] = useState(null);
+  const [modalVisible, setModalVisible] = useState(false);
+  const [loadingRecipe, setLoadingRecipe] = useState(false);
 
   // --- ÉTATS FORMULAIRES ---
   const [ingName, setIngName] = useState('');
@@ -64,13 +71,11 @@ export default function App() {
     loadAllData();
   }, []);
 
-  // --- LOGIQUE INGRÉDIENTS ---
+  // --- LOGIQUE INGRÉDIENTS & ÉQUIPEMENTS ---
   const handleAddIngredient = async () => {
     if (!ingName || !ingQty) return;
     const result = await ingredientService.create({ 
-      name: ingName, 
-      quantity: parseFloat(ingQty), 
-      unit: ingUnit 
+      name: ingName, quantity: parseFloat(ingQty), unit: ingUnit 
     });
     if (result && !result.detail) {
       setIngName(''); setIngQty(''); setIngUnit('pcs');
@@ -78,14 +83,10 @@ export default function App() {
     }
   };
 
-  // --- LOGIQUE ÉQUIPEMENT ---
   const handleAddEquipment = async () => {
     if (!eqName) return;
     const result = await equipmentService.create(eqName);
-    if (result) {
-      setEqName('');
-      loadAllData();
-    }
+    if (result) { setEqName(''); loadAllData(); }
   };
 
   const handleToggleEquipment = async (id) => {
@@ -103,9 +104,24 @@ export default function App() {
       setSuggestions(data.suggestions);
       setCurrentScreen('suggestions');
     } catch (e) {
-      Alert.alert("Erreur", "Impossible de contacter l'IA.");
+      Alert.alert("Oups !", "Le chef IA est un peu fatigué.");
     } finally {
       setLoading(false);
+    }
+  };
+
+  // NOUVEAU : Récupérer les détails d'une recette
+  const handleViewRecipe = async (title) => {
+    setLoadingRecipe(true);
+    setModalVisible(true);
+    try {
+      const details = await aiService.getRecipeDetails(title);
+      setSelectedRecipe(details);
+    } catch (e) {
+      setModalVisible(false);
+      Alert.alert("Erreur", "Impossible de charger la recette.");
+    } finally {
+      setLoadingRecipe(false);
     }
   };
 
@@ -149,10 +165,9 @@ export default function App() {
           </View>
         )}
       />
-
-      {/* BOUTON GÉNÉRER ✨ */}
+      {/* BOUTON GÉNÉRER*/}
       <TouchableOpacity style={styles.generateFab} onPress={handleGenerateRecipes}>
-        <Text style={styles.generateFabText}>✨ Generate Ideas</Text>
+        <Text style={styles.generateFabText}>Generate Ideas</Text>
       </TouchableOpacity>
 
       <View style={styles.footer}>
@@ -211,7 +226,7 @@ export default function App() {
   const renderSuggestions = () => (
     <View style={{ flex: 1 }}>
       <View style={styles.header}>
-        <Text style={styles.title}>💡 AI Suggestions</Text>
+        <Text style={styles.title}>AI Suggestions</Text>
         <Text style={styles.subtitle}>Recipes matching your inventory</Text>
       </View>
       <FlatList
@@ -225,8 +240,11 @@ export default function App() {
               <Text style={styles.recipeScore}>{item.score}</Text>
             </View>
             <Text style={styles.recipeDesc}>{item.description}</Text>
-            <TouchableOpacity style={styles.recipeBtn}>
-              <Text style={styles.recipeBtnText}>See details</Text>
+            <TouchableOpacity 
+              style={styles.recipeBtn} 
+              onPress={() => handleViewRecipe(item.title)}
+            >
+              <Text style={styles.recipeBtnText}>Let's get started</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -244,19 +262,74 @@ export default function App() {
         {loading ? (
           <View style={styles.centered}>
             <ActivityIndicator size="large" color="#1A1A1A" />
-            <Text style={{marginTop: 10, color: '#AAA'}}>Cooking something special...</Text>
+            <Text style={styles.loadingText}>Cooking something special...</Text>
           </View>
         ) : (
           currentScreen === 'pantry' ? renderPantry() : 
           currentScreen === 'equipment' ? renderEquipment() : 
           renderSuggestions()
         )}
+
+        {/* MODAL POUR LE DÉTAIL DE LA RECETTE */}
+        <Modal
+          animationType="slide"
+          visible={modalVisible}
+          presentationStyle="pageSheet"
+          onRequestClose={() => setModalVisible(false)}
+        >
+          <View style={styles.modalContent}>
+            {loadingRecipe ? (
+              <View style={styles.centered}>
+                <ActivityIndicator size="large" color="#1A1A1A" />
+                <Text style={styles.loadingText}>Rédaction de la recette...</Text>
+              </View>
+            ) : selectedRecipe && (
+              <ScrollView showsVerticalScrollIndicator={false}>
+                <View style={styles.modalHeader}>
+                   <Text style={styles.modalTitle}>{selectedRecipe.title}</Text>
+                   <TouchableOpacity onPress={() => setModalVisible(false)}>
+                      <Ionicons name="close-circle" size={30} color="#DDD" />
+                   </TouchableOpacity>
+                </View>
+
+                <View style={styles.recipeInfoRow}>
+                  <View style={styles.infoBadge}>
+                    <Ionicons name="time-outline" size={16} color="#666" />
+                    <Text style={styles.infoBadgeText}>{selectedRecipe.prep_time}</Text>
+                  </View>
+                  <View style={styles.infoBadge}>
+                    <Ionicons name="stats-chart-outline" size={16} color="#666" />
+                    <Text style={styles.infoBadgeText}>{selectedRecipe.difficulty}</Text>
+                  </View>
+                </View>
+
+                <Text style={styles.modalSectionTitle}>Ingredients</Text>
+                {selectedRecipe.ingredients.map((ing, idx) => (
+                  <Text key={idx} style={styles.modalIngredient}>• {ing}</Text>
+                ))}
+
+                <Text style={styles.modalSectionTitle}>Instructions</Text>
+                {selectedRecipe.instructions.map((step, idx) => (
+                  <View key={idx} style={styles.stepRow}>
+                    <View style={styles.stepNumberContainer}>
+                      <Text style={styles.stepNumberText}>{idx + 1}</Text>
+                    </View>
+                    <Text style={styles.stepDescription}>{step}</Text>
+                  </View>
+                ))}
+
+                <View style={{height: 50}} />
+              </ScrollView>
+            )}
+          </View>
+        </Modal>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  // ... GARDE TES STYLES EXISTANTS ...
   container: { flex: 1, backgroundColor: '#FFFFFF' },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   header: { padding: 25, paddingTop: 10 },
@@ -264,36 +337,28 @@ const styles = StyleSheet.create({
   title: { fontSize: 28, fontWeight: '800', letterSpacing: -0.5 },
   subtitle: { fontSize: 14, color: '#AAA', marginTop: 4 },
   settingsBtn: { backgroundColor: '#F5F5F5', padding: 8, borderRadius: 12 },
-  
   listContent: { paddingHorizontal: 25, paddingBottom: 180 },
   sectionContainer: { marginBottom: 25 },
   sectionTitle: { fontSize: 12, fontWeight: '700', color: '#CCC', textTransform: 'uppercase', marginBottom: 10, letterSpacing: 1 },
-  
   card: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 15, borderBottomWidth: 0.5, borderBottomColor: '#F0F0F0' },
   cardMainText: { fontSize: 16, fontWeight: '600', textTransform: 'capitalize' },
   cardSubText: { fontSize: 12, color: '#999', marginTop: 2 },
-  
   eqCard: { flexDirection: 'row', justifyContent: 'space-between', padding: 18, backgroundColor: '#F9F9F9', borderRadius: 14, marginBottom: 12 },
   eqCardInactive: { opacity: 0.4, backgroundColor: '#FFF', borderWidth: 1, borderColor: '#EEE' },
   eqText: { fontSize: 16, fontWeight: '600', textTransform: 'capitalize' },
   eqTextInactive: { color: '#AAA', textDecorationLine: 'line-through' },
-
   footer: { position: 'absolute', bottom: 0, width: '100%', padding: 20, paddingBottom: Platform.OS === 'ios' ? 40 : 20, backgroundColor: '#FFF', borderTopWidth: 1, borderTopColor: '#F5F5F5' },
   inputContainer: { flexDirection: 'row', gap: 10 },
   input: { backgroundColor: '#F5F5F5', padding: 12, borderRadius: 12, fontSize: 15 },
   addButton: { backgroundColor: '#1A1A1A', width: 52, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
-  
   unitSelector: { flexDirection: 'row', marginBottom: 12, gap: 8 },
   unitBadge: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, backgroundColor: '#F5F5F5' },
   unitBadgeActive: { backgroundColor: '#1A1A1A' },
   unitText: { fontSize: 11, fontWeight: '700', color: '#AAA' },
   unitTextActive: { color: '#FFF' },
-
   generateFab: { position: 'absolute', bottom: 130, right: 20, backgroundColor: '#1A1A1A', paddingHorizontal: 20, paddingVertical: 14, borderRadius: 30, flexDirection: 'row', alignItems: 'center', elevation: 5, shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 10 },
   generateFabText: { color: 'white', fontWeight: '800', fontSize: 15 },
-  
   backFab: { position: 'absolute', bottom: 30, alignSelf: 'center', backgroundColor: '#666', paddingHorizontal: 25, paddingVertical: 12, borderRadius: 25, flexDirection: 'row', alignItems: 'center' },
-  
   recipeCard: { backgroundColor: '#F9F9F9', borderRadius: 18, padding: 20, marginBottom: 15, borderWidth: 1, borderColor: '#F0F0F0' },
   recipeHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 },
   recipeTitle: { fontSize: 18, fontWeight: '700' },
@@ -301,8 +366,22 @@ const styles = StyleSheet.create({
   recipeDesc: { color: '#666', fontSize: 14, lineHeight: 20, marginBottom: 15 },
   recipeBtn: { backgroundColor: '#1A1A1A', padding: 12, borderRadius: 10, alignItems: 'center' },
   recipeBtnText: { color: 'white', fontWeight: '700' },
-  
   doneBtn: { backgroundColor: '#F0F9F0', padding: 15, borderRadius: 12, marginTop: 12, alignItems: 'center' },
   doneBtnText: { color: '#2D5A27', fontWeight: '700' },
-  emptyText: { color: '#DDD', fontStyle: 'italic', marginVertical: 10 }
+  emptyText: { color: '#DDD', fontStyle: 'italic', marginVertical: 10 },
+  loadingText: { marginTop: 20, fontSize: 18, fontWeight: '700', color: '#1A1A1A' },
+
+  // --- NOUVEAUX STYLES POUR LA MODAL ---
+  modalContent: { flex: 1, padding: 25, backgroundColor: 'white' },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 },
+  modalTitle: { fontSize: 24, fontWeight: '800', width: '80%' },
+  modalSectionTitle: { fontSize: 18, fontWeight: '700', marginTop: 25, marginBottom: 15 },
+  modalIngredient: { fontSize: 15, color: '#444', marginBottom: 8, lineHeight: 22 },
+  recipeInfoRow: { flexDirection: 'row', gap: 15 },
+  infoBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F5F5F5', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, gap: 5 },
+  infoBadgeText: { fontSize: 13, fontWeight: '600', color: '#666' },
+  stepRow: { flexDirection: 'row', marginBottom: 20, gap: 15 },
+  stepNumberContainer: { width: 28, height: 28, backgroundColor: '#1A1A1A', borderRadius: 14, justifyContent: 'center', alignItems: 'center' },
+  stepNumberText: { color: 'white', fontSize: 14, fontWeight: '700' },
+  stepDescription: { flex: 1, fontSize: 15, color: '#444', lineHeight: 22 }
 });
