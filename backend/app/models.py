@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, Boolean
+from sqlalchemy import Column, Integer, String, Float, Boolean, JSON
 from .database import Base
 
 class Ingredient(Base):
@@ -16,3 +16,11 @@ class Equipment(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, unique=True, index=True)
     is_active = Column(Boolean, default=True) # Pour savoir si on peut l'utiliser
+
+class FavoriteRecipe(Base):
+    __tablename__ = "favorite_recipes"
+
+    id = Column(Integer, primary_key=True, index=True)
+    title = Column(String)
+    # On stocke les listes (ingrédients/étapes) au format JSON
+    details = Column(JSON)

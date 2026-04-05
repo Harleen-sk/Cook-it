@@ -6,6 +6,7 @@ import json
 from google import genai
 from google.genai import types
 from dotenv import load_dotenv
+from typing import List
 
 load_dotenv()
 
@@ -191,3 +192,30 @@ def get_recipe_details(title: str, db: Session = Depends(get_db)):
     except Exception as e:
         print(f"Erreur détaillée Gemini: {e}")
         raise HTTPException(status_code=500, detail="L'IA a eu un petit coup de chaud en cuisine et n'a pas pu générer le détail de votre recette")
+    
+# Route pour sauvegarder une recette
+@app.post("/favorites", response_model=schemas.FavoriteRecipe)
+def save_favorite(recipe: schemas.FavoriteRecipeCreate, db: Session = Depends(get_db)):
+    new_fav = models.FavoriteRecipe(
+        title=recipe.title,
+        details=recipe.details
+    )
+    db.add(new_fav)
+    db.commit()
+    db.refresh(new_fav)
+    return new_fav
+
+# Route pour lister les favoris
+@app.get("/favorites", response_model=List[schemas.FavoriteRecipe])
+def get_favorites(db: Session = Depends(get_db)):
+    return db.query(models.FavoriteRecipe).all()
+
+@app.delete("/favorites/{fav_id}")
+def delete_favorite(fav_id: int, db: Session = Depends(get_db)):
+    db_fav = db.query(models.FavoriteRecipe).filter(models.FavoriteRecipe.id == fav_id).first()
+    if not db_fav:
+        raise HTTPException(status_code=404, detail="Recette non trouvée")
+    
+    db.delete(db_fav)
+    db.commit()
+    return {"message": "Favori supprimé"}

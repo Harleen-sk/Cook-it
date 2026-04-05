@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import Optional
+from typing import List, Dict, Any
 
 class IngredientCreate(BaseModel):
     name: str
@@ -16,7 +16,6 @@ class Ingredient(IngredientCreate):
     class Config:
         from_attributes = True # Converts SQLAlchemy objects to JSON
 
-
 class EquipmentBase(BaseModel):
     name: str
     is_active: bool = True
@@ -26,5 +25,17 @@ class EquipmentCreate(EquipmentBase):
 
 class Equipment(EquipmentBase):
     id: int
+    class Config:
+        from_attributes = True
+
+class FavoriteRecipeCreate(BaseModel):
+    title: str
+    details: Dict[str, Any]
+
+class FavoriteRecipe(BaseModel):
+    id: int
+    title: str
+    details: Dict[str, Any]
+
     class Config:
         from_attributes = True

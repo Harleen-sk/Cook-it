@@ -31,6 +31,7 @@ export default function App() {
   const [equipments, setEquipments] = useState([]);
   const [suggestions, setSuggestions] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [favorites, setFavorites] = useState([]);
   
   // --- ÉTATS RECETTE DÉTAILLÉE ---
   const [selectedRecipe, setSelectedRecipe] = useState(null);
@@ -125,6 +126,26 @@ export default function App() {
     }
   };
 
+  const handleSaveFavorite = async () => {
+    if (!selectedRecipe) return;
+    
+    try {
+      await aiService.saveFavorite(selectedRecipe);
+      Alert.alert("Succès !", "La recette a été ajoutée à tes favoris ❤️");
+    } catch (e) {
+      Alert.alert("Erreur", "Impossible de sauvegarder la recette.");
+    }
+  };
+
+  const loadFavorites = async () => {
+    try {
+      const data = await aiService.getFavorites();
+      setFavorites(data);
+    } catch (e) {
+      console.log("Erreur chargement favoris", e);
+    }
+  };
+
   // --- RENDUS D'ÉCRANS ---
 
   const renderPantry = () => (
@@ -132,6 +153,15 @@ export default function App() {
       <View style={styles.header}>
         <View style={styles.headerRow}>
           <Text style={styles.title}>My Pantry</Text>
+          <TouchableOpacity 
+            style={[styles.settingsBtn, {marginRight: 10}]} 
+            onPress={() => {
+              loadFavorites();
+              setCurrentScreen('favorites');
+            }}
+          >
+            <Ionicons name="heart" size={22} color="#FF4444" />
+          </TouchableOpacity>
           <TouchableOpacity style={styles.settingsBtn} onPress={() => setCurrentScreen('equipment')}>
             <Ionicons name="cog-outline" size={22} color="#666" />
           </TouchableOpacity>
@@ -223,6 +253,46 @@ export default function App() {
     </View>
   );
 
+  const renderFavorites = () => (
+    <View style={{ flex: 1 }}>
+      <View style={styles.header}>
+        <Text style={styles.title}>❤️ Mes Favoris</Text>
+        <Text style={styles.subtitle}>Tes recettes sauvegardées</Text>
+      </View>
+
+      <FlatList
+        data={favorites}
+        keyExtractor={(item) => item.id.toString()}
+        contentContainerStyle={styles.listContent}
+        renderItem={({ item }) => (
+          <View style={styles.recipeCard}>
+            <Text style={styles.recipeTitle}>{item.title}</Text>
+            <Text style={styles.recipeDesc} numberOfLines={2}>
+              {item.details.ingredients.length} ingrédients • {item.details.prep_time}
+            </Text>
+            <TouchableOpacity 
+              style={styles.recipeBtn} 
+              onPress={() => {
+                setSelectedRecipe(item.details); // On réutilise la modal existante !
+                setModalVisible(true);
+              }}
+            >
+              <Text style={styles.recipeBtnText}>Voir la recette</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+        ListEmptyComponent={
+          <Text style={styles.emptyText}>Aucun favori pour le moment.</Text>
+        }
+      />
+
+      <TouchableOpacity style={styles.backFab} onPress={() => setCurrentScreen('pantry')}>
+        <Ionicons name="arrow-back" size={20} color="white" />
+        <Text style={{color: 'white', fontWeight: '700', marginLeft: 8}}>Retour</Text>
+      </TouchableOpacity>
+    </View>
+  );
+
   const renderSuggestions = () => (
     <View style={{ flex: 1 }}>
       <View style={styles.header}>
@@ -266,7 +336,8 @@ export default function App() {
           </View>
         ) : (
           currentScreen === 'pantry' ? renderPantry() : 
-          currentScreen === 'equipment' ? renderEquipment() : 
+          currentScreen === 'equipment' ? renderEquipment() :
+          currentScreen === 'favorites' ? renderFavorites() : 
           renderSuggestions()
         )}
 
@@ -287,6 +358,16 @@ export default function App() {
               <ScrollView showsVerticalScrollIndicator={false}>
                 <View style={styles.modalHeader}>
                    <Text style={styles.modalTitle}>{selectedRecipe.title}</Text>
+                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 15 }}>
+                      {/* BOUTON SAUVEGARDER */}
+                      <TouchableOpacity onPress={handleSaveFavorite}>
+                        <Ionicons name="heart-outline" size={28} color="#FF4444" />
+                      </TouchableOpacity>
+
+                      <TouchableOpacity onPress={() => setModalVisible(false)}>
+                        <Ionicons name="close-circle" size={30} color="#DDD" />
+                      </TouchableOpacity>
+                    </View>
                    <TouchableOpacity onPress={() => setModalVisible(false)}>
                       <Ionicons name="close-circle" size={30} color="#DDD" />
                    </TouchableOpacity>

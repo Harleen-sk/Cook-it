@@ -77,5 +77,45 @@ export const aiService = {
       console.error("Erreur détails recette:", error);
       throw error; // On propage l'erreur pour que l'App.js la capture
     }
+  },
+
+  // Sauvegarder une recette dans les favoris
+  saveFavorite: async (recipeData) => {
+    try {
+      const response = await fetch(`${BASE_URL}/favorites`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: recipeData.title,
+          details: recipeData // On envoie l'objet complet (instructions, temps, etc.)
+        }),
+      });
+      return await response.json();
+    } catch (error) {
+      console.error("Erreur sauvegarde favori:", error);
+      throw error;
+    }
+  },
+
+  getFavorites: async () => {
+    try {
+      const response = await fetch(`${BASE_URL}/favorites`);
+      return await response.json();
+    } catch (error) {
+      console.error("Erreur récupération favoris:", error);
+      throw error;
+    }
   }
 };
+
+deleteFavorite: async (id) => {
+  try {
+    const response = await fetch(`${BASE_URL}/favorites/${id}`, {
+      method: 'DELETE',
+    });
+    return await response.json();
+  } catch (error) {
+    console.error("Erreur suppression favori:", error);
+    throw error;
+  }
+}
