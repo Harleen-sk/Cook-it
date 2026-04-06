@@ -46,6 +46,12 @@ export default function App() {
 
   const availableUnits = ['pcs', 'g', 'kg', 'ml', 'l'];
 
+  const [selectionModalVisible, setSelectionModalVisible] = useState(false);
+  const [selectedIngredients, setSelectedIngredients] = useState([]);
+  const [selectedEquipments, setSelectedEquipments] = useState([]);
+
+  const [selectedMealType, setSelectedMealType] = useState('lunch');
+
   // --- CHARGEMENT INITIAL ---
   const loadAllData = async () => {
     setLoading(true);
@@ -98,14 +104,28 @@ export default function App() {
   };
 
   // --- LOGIQUE IA ---
-  const handleGenerateRecipes = async () => {
+  const mealTypes = [
+    { id: 'breakfast', label: 'Petit-déj', emoji: '🍳' },
+    { id: 'lunch', label: 'Déjeuner', emoji: '🥗' },
+    { id: 'snack', label: 'Goûter', emoji: '🍎' },
+    { id: 'dinner', label: 'Dîner', emoji: '🍲' },
+  ];
+
+  const handleGenerateRecipes = async (selectedIngs, selectedEqs) => {
     setLoading(true);
     try {
-      const data = await aiService.getSuggestions();
+      const selection = {
+        ingredients: selectedIngs,
+        equipment: selectedEqs,
+        meal_type: selectedMealType
+      };
+
+      const data = await aiService.getSuggestions(selection);
       setSuggestions(data.suggestions);
       setCurrentScreen('suggestions');
+      setModalVisible(false); // On ferme la modal après succès
     } catch (e) {
-      Alert.alert("Oups !", "Le chef IA est un peu fatigué.");
+      Alert.alert("Erreur", "L'IA n'a pas pu mijoter vos idées.");
     } finally {
       setLoading(false);
     }
@@ -145,6 +165,24 @@ export default function App() {
       console.log("Erreur chargement favoris", e);
     }
   };
+
+  const handleDeleteFavorite = async (id) => {
+    console.log("Tentative de suppression de l'ID:", id); // Vérifie dans ton terminal si l'ID est bien un nombre
+    try {
+      const result = await aiService.deleteFavorite(id);
+      setFavorites(prev => prev.filter(fav => fav.id !== id));
+    } catch (e) {
+      console.error("Détail erreur suppression:", e);
+      Alert.alert("Erreur", "Impossible de supprimer ce favori.");
+    }
+  };
+
+  const openSelectionScreen = () => {
+    setSelectedIngredients(ingredients.map(i => i.name));
+    setSelectedEquipments(equipments.filter(e => e.is_active).map(e => e.name));
+    setCurrentScreen('selection');
+  };
+
 
   // --- RENDUS D'ÉCRANS ---
 
@@ -196,7 +234,7 @@ export default function App() {
         )}
       />
       {/* BOUTON GÉNÉRER*/}
-      <TouchableOpacity style={styles.generateFab} onPress={handleGenerateRecipes}>
+      <TouchableOpacity style={styles.generateFab} onPress={openSelectionScreen}>
         <Text style={styles.generateFabText}>Generate Ideas</Text>
       </TouchableOpacity>
 
@@ -266,10 +304,19 @@ export default function App() {
         contentContainerStyle={styles.listContent}
         renderItem={({ item }) => (
           <View style={styles.recipeCard}>
-            <Text style={styles.recipeTitle}>{item.title}</Text>
+            <View style={styles.recipeHeader}>
+              <Text style={styles.recipeTitle}>{item.title}</Text>
+              {/* ICI SE TROUVE LA SUPPRESSION */}
+              <TouchableOpacity onPress={() => handleDeleteFavorite(item.id)}>
+                <Ionicons name="trash" size={22} color="#FF4444" />
+              </TouchableOpacity>
+            </View>
+
             <Text style={styles.recipeDesc} numberOfLines={2}>
               {item.details.ingredients.length} ingrédients • {item.details.prep_time}
             </Text>
+
+  
             <TouchableOpacity 
               style={styles.recipeBtn} 
               onPress={() => {
@@ -326,6 +373,77 @@ export default function App() {
     </View>
   );
 
+  const renderSelection = () => (
+    <View style={{ flex: 1, backgroundColor: '#FFF' }}>
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => setCurrentScreen('pantry')} style={{marginBottom: 10}}>
+          <Ionicons name="arrow-back" size={24} color="#1A1A1A" />
+        </TouchableOpacity>
+        <Text style={styles.title}>Ma Sélection 🍳</Text>
+        <Text style={styles.subtitle}>Personnalisez avant de cuisiner</Text>
+      </View>
+
+      <ScrollView contentContainerStyle={styles.listContent} showsVerticalScrollIndicator={false}>
+        <Text style={styles.miniTitle}>Moment de la journée</Text>
+        <View style={styles.chipContainer}>
+          {['Petit-déjeuner', 'Déjeuner', 'Goûter', 'Dîner'].map(type => (
+            <TouchableOpacity 
+              key={type} 
+              style={[styles.chip, selectedMealType === type && styles.chipActive]}
+              onPress={() => setSelectedMealType(type)}
+            >
+              <Text style={[styles.chipText, selectedMealType === type && styles.chipTextActive]}>{type}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        <Text style={styles.miniTitle}>Ingrédients ({selectedIngredients.length})</Text>
+        <View style={styles.chipContainer}>
+          {ingredients.map(ing => (
+            <TouchableOpacity 
+              key={ing.id} 
+              style={[styles.chip, selectedIngredients.includes(ing.name) && styles.chipActive]}
+              onPress={() => {
+                setSelectedIngredients(prev => 
+                  prev.includes(ing.name) ? prev.filter(i => i !== ing.name) : [...prev, ing.name]
+                );
+              }}
+            >
+              <Text style={[styles.chipText, selectedIngredients.includes(ing.name) && styles.chipTextActive]}>{ing.name}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        <Text style={styles.miniTitle}>Matériel ({selectedEquipments.length})</Text>
+        <View style={styles.chipContainer}>
+          {equipments.filter(e => e.is_active).map(eq => (
+            <TouchableOpacity 
+              key={eq.id} 
+              style={[styles.chip, selectedEquipments.includes(eq.name) && styles.chipActive]}
+              onPress={() => {
+                setSelectedEquipments(prev => 
+                  prev.includes(eq.name) ? prev.filter(e => e !== eq.name) : [...prev, eq.name]
+                );
+              }}
+            >
+              <Text style={[styles.chipText, selectedEquipments.includes(eq.name) && styles.chipTextActive]}>{eq.name}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+        <View style={{ height: 100 }} />
+      </ScrollView>
+
+      <View style={styles.footerSelection}>
+        <TouchableOpacity 
+          style={styles.launchBtn} 
+          onPress={() => handleGenerateRecipes(selectedIngredients, selectedEquipments)}
+        >
+          <Text style={styles.launchBtnText}>Lancer le Chef IA ✨</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+
   return (
     <SafeAreaView style={styles.container}>
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1 }}>
@@ -337,8 +455,9 @@ export default function App() {
         ) : (
           currentScreen === 'pantry' ? renderPantry() : 
           currentScreen === 'equipment' ? renderEquipment() :
-          currentScreen === 'favorites' ? renderFavorites() : 
-          renderSuggestions()
+          currentScreen === 'favorites' ? renderFavorites() :
+          currentScreen === 'suggestions' ? renderSuggestions() : 
+          renderSelection()
         )}
 
         {/* MODAL POUR LE DÉTAIL DE LA RECETTE */}
@@ -385,7 +504,7 @@ export default function App() {
                 </View>
 
                 <Text style={styles.modalSectionTitle}>Ingredients</Text>
-                {selectedRecipe.ingredients.map((ing, idx) => (
+                    {selectedRecipe.ingredients.map((ing, idx) => (
                   <Text key={idx} style={styles.modalIngredient}>• {ing}</Text>
                 ))}
 
@@ -402,6 +521,87 @@ export default function App() {
                 <View style={{height: 50}} />
               </ScrollView>
             )}
+          </View>
+        </Modal>
+
+        <Modal 
+          visible={selectionModalVisible} 
+          animationType="slide" 
+          transparent={true}
+          onRequestClose={() => setSelectionModalVisible(false)}
+        >
+          <View style={styles.overlay}>
+            <View style={[styles.selectionCard, { maxHeight: '85%' }]}>
+              {/* Barre de saisie visuelle pour fermer */}
+              <View style={{ width: 40, height: 5, backgroundColor: '#EEE', borderRadius: 10, alignSelf: 'center', marginBottom: 15 }} />
+
+              <Text style={styles.modalTitle}>Ma sélection 🍳</Text>
+
+              <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 100 }}>
+
+                {/* NOUVEAU : Sélection du type de repas */}
+                <Text style={styles.miniTitle}>Moment de la journée</Text>
+                <View style={styles.chipContainer}>
+                  {['Petit-déjeuner', 'Déjeuner', 'Goûter', 'Dîner'].map(type => (
+                    <TouchableOpacity 
+                      key={type} 
+                      style={[styles.chip, selectedMealType === type && styles.chipActive]}
+                      onPress={() => setSelectedMealType(type)}
+                    >
+                      <Text style={[styles.chipText, selectedMealType === type && styles.chipTextActive]}>{type}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+                
+                <Text style={styles.miniTitle}>Ingrédients ({selectedIngredients.length})</Text>
+                <View style={styles.chipContainer}>
+                  {ingredients.map(ing => (
+                    <TouchableOpacity 
+                      key={ing.id} 
+                      style={[styles.chip, selectedIngredients.includes(ing.name) && styles.chipActive]}
+                      onPress={() => {
+                        setSelectedIngredients(prev => 
+                          prev.includes(ing.name) ? prev.filter(i => i !== ing.name) : [...prev, ing.name]
+                        );
+                      }}
+                    >
+                      <Text style={[styles.chipText, selectedIngredients.includes(ing.name) && styles.chipTextActive]}>{ing.name}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+                
+                <Text style={styles.miniTitle}>Matériel ({selectedEquipments.length})</Text>
+                <View style={styles.chipContainer}>
+                  {equipments.filter(e => e.is_active).map(eq => (
+                    <TouchableOpacity 
+                      key={eq.id} 
+                      style={[styles.chip, selectedEquipments.includes(eq.name) && styles.chipActive]}
+                      onPress={() => {
+                        setSelectedEquipments(prev => 
+                          prev.includes(eq.name) ? prev.filter(e => e !== eq.name) : [...prev, eq.name]
+                        );
+                      }}
+                    >
+                      <Text style={[styles.chipText, selectedEquipments.includes(eq.name) && styles.chipTextActive]}>{eq.name}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </ScrollView>
+                
+              {/* Bouton fixé en bas de la carte */}
+              <View style={{ position: 'absolute', bottom: 20, left: 20, right: 20, backgroundColor: 'white', paddingTop: 10 }}>
+                <TouchableOpacity 
+                  style={styles.launchBtn} 
+                  onPress={() => {
+                    setSelectionModalVisible(false);
+                    // On envoie maintenant le mealType en plus
+                    handleGenerateRecipes(selectedIngredients, selectedEquipments, selectedMealType);
+                  }}
+                >
+                  <Text style={styles.launchBtnText}>Lancer le Chef IA ✨</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
           </View>
         </Modal>
       </KeyboardAvoidingView>
@@ -464,5 +664,90 @@ const styles = StyleSheet.create({
   stepRow: { flexDirection: 'row', marginBottom: 20, gap: 15 },
   stepNumberContainer: { width: 28, height: 28, backgroundColor: '#1A1A1A', borderRadius: 14, justifyContent: 'center', alignItems: 'center' },
   stepNumberText: { color: 'white', fontSize: 14, fontWeight: '700' },
-  stepDescription: { flex: 1, fontSize: 15, color: '#444', lineHeight: 22 }
+  stepDescription: { flex: 1, fontSize: 15, color: '#444', lineHeight: 22 },
+
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  selectionCard: { backgroundColor: 'white', borderTopLeftRadius: 30, borderTopRightRadius: 30, padding: 25, minHeight: height * 0.7 },
+  miniTitle: { fontSize: 14, fontWeight: '700', color: '#CCC', textTransform: 'uppercase', marginVertical: 15 },
+  chipContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  chip: { paddingHorizontal: 15, paddingVertical: 8, borderRadius: 20, backgroundColor: '#F0F0F0', borderWidth: 1, borderColor: '#EEE' },
+  chipActive: { backgroundColor: '#1A1A1A', borderColor: '#1A1A1A' },
+  chipText: { color: '#666', fontWeight: '600' },
+  chipTextActive: { color: '#FFF' },
+  launchBtn: { backgroundColor: '#1A1A1A', padding: 18, borderRadius: 15, marginTop: 30, alignItems: 'center' },
+  launchBtnText: { color: 'white', fontWeight: '800', fontSize: 16 },
+
+  sectionContainer: {
+    marginBottom: 20,
+    padding: 10,
+    backgroundColor: '#f9f9f9',
+    borderRadius: 15,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 10,
+    color: '#2d3436',
+  },
+  mealTypeContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+  },
+  mealChip: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#dfe6e9',
+    backgroundColor: '#fff',
+    marginBottom: 8,
+    minWidth: '48%', // Pour avoir 2 colonnes propres
+    alignItems: 'center',
+  },
+  mealChipSelected: {
+    backgroundColor: '#00b894',
+    borderColor: '#00b894',
+  },
+  mealText: {
+    color: '#636e72',
+    fontWeight: '600',
+  },
+  mealTextSelected: {
+    color: '#fff',
+  },
+  footerSelection: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    padding: 20,
+    backgroundColor: 'white',
+    borderTopWidth: 1,
+    borderTopColor: '#F5F5F5',
+  },
+  launchBtn: {
+    backgroundColor: '#1A1A1A',
+    padding: 18,
+    borderRadius: 15,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    elevation: 5
+  },
+  launchBtnText: { color: 'white', fontSize: 18, fontWeight: '800' },
+  chip: {
+    paddingHorizontal: 15,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: '#F5F5F5',
+    marginRight: 8,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#EEE'
+  },
+  chipActive: { backgroundColor: '#1A1A1A', borderColor: '#1A1A1A' },
+  chipText: { color: '#666', fontSize: 13, fontWeight: '600' },
+  chipTextActive: { color: '#FFF' },
 });

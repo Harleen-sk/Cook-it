@@ -52,10 +52,14 @@ export const equipmentService = {
 };
 
 export const aiService = {
-  // Fonction pour les 3 idées de base
-  getSuggestions: async () => {
+  // Correction : On passe en POST et on accepte la sélection
+  getSuggestions: async (selection) => {
     try {
-      const response = await fetch(`${BASE_URL}/generate-ideas`);
+      const response = await fetch(`${BASE_URL}/generate-ideas`, {
+        method: 'POST', // Impératif pour correspondre au Backend
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(selection) // On envoie {ingredients: [], equipment: []}
+      });
       return await response.json();
     } catch (error) {
       console.error("Erreur suggestions:", error);
@@ -63,59 +67,37 @@ export const aiService = {
     }
   },
 
-  // Fonction pour le détail complet (Celle qui manquait à l'objet)
   getRecipeDetails: async (recipeTitle) => {
-    try {
-      const response = await fetch(`${BASE_URL}/recipe-details?title=${encodeURIComponent(recipeTitle)}`);
-      
-      if (!response.ok) {
-        throw new Error(`Erreur HTTP: ${response.status}`);
-      }
-      
-      return await response.json();
-    } catch (error) {
-      console.error("Erreur détails recette:", error);
-      throw error; // On propage l'erreur pour que l'App.js la capture
-    }
+    const response = await fetch(`${BASE_URL}/recipe-details?title=${encodeURIComponent(recipeTitle)}`);
+    return await response.json();
   },
 
-  // Sauvegarder une recette dans les favoris
   saveFavorite: async (recipeData) => {
-    try {
-      const response = await fetch(`${BASE_URL}/favorites`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: recipeData.title,
-          details: recipeData // On envoie l'objet complet (instructions, temps, etc.)
-        }),
-      });
-      return await response.json();
-    } catch (error) {
-      console.error("Erreur sauvegarde favori:", error);
-      throw error;
-    }
+    const response = await fetch(`${BASE_URL}/favorites`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: recipeData.title,
+        details: recipeData 
+      }),
+    });
+    return await response.json();
   },
 
   getFavorites: async () => {
+    const response = await fetch(`${BASE_URL}/favorites`);
+    return await response.json();
+  },
+
+  deleteFavorite: async (id) => {
     try {
-      const response = await fetch(`${BASE_URL}/favorites`);
+      const response = await fetch(`${BASE_URL}/favorites/${id}`, {
+        method: 'DELETE',
+      });
       return await response.json();
     } catch (error) {
-      console.error("Erreur récupération favoris:", error);
+      console.error("Erreur suppression favori:", error);
       throw error;
     }
   }
 };
-
-deleteFavorite: async (id) => {
-  try {
-    const response = await fetch(`${BASE_URL}/favorites/${id}`, {
-      method: 'DELETE',
-    });
-    return await response.json();
-  } catch (error) {
-    console.error("Erreur suppression favori:", error);
-    throw error;
-  }
-}

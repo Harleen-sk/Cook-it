@@ -1,10 +1,10 @@
 from pydantic import BaseModel
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 class IngredientCreate(BaseModel):
     name: str
     quantity: float
-    unit: str
+    unit: Optional[str] = "pcs"
     is_staple: bool = False
 # ajouter la date de péremption
 
@@ -39,3 +39,8 @@ class FavoriteRecipe(BaseModel):
 
     class Config:
         from_attributes = True
+
+# class SelectionRequest(BaseModel):
+#     ingredients: List[str]
+#     equipment: List[str]
+
