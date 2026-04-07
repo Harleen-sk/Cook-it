@@ -19,6 +19,7 @@ import { Ionicons } from '@expo/vector-icons';
 
 // Importation de nos services
 import { ingredientService, equipmentService, aiService } from './src/services/api';
+import { translations } from './src/utils/translations';
 
 const { width, height } = Dimensions.get('window');
 
@@ -46,11 +47,11 @@ export default function App() {
 
   const availableUnits = ['pcs', 'g', 'kg', 'ml', 'l'];
 
-  const [selectionModalVisible, setSelectionModalVisible] = useState(false);
   const [selectedIngredients, setSelectedIngredients] = useState([]);
   const [selectedEquipments, setSelectedEquipments] = useState([]);
 
   const [selectedMealType, setSelectedMealType] = useState('lunch');
+  const [language, setLanguage] = useState('en');
 
   // --- CHARGEMENT INITIAL ---
   const loadAllData = async () => {
@@ -62,7 +63,6 @@ export default function App() {
       ]);
       setIngredients(ingData);
       setEquipments(eqData);
-      
       // Si c'est un nouvel utilisateur (pas d'équipement), on l'envoie configurer sa cuisine
       if (eqData.length === 0 && currentScreen === 'pantry') {
         setCurrentScreen('equipment');
@@ -78,7 +78,15 @@ export default function App() {
     loadAllData();
   }, []);
 
-  // --- LOGIQUE INGRÉDIENTS & ÉQUIPEMENTS ---
+  // --- LOGIQUE TRADUCTION ---
+  const t = (key) => {
+    const keys = key.split('.');
+    let result = translations[language];
+    keys.forEach(k => { result = result ? result[k] : null; });
+    return result || key;
+  };
+
+  // --- LOGIQUE ACTIONS ---
   const handleAddIngredient = async () => {
     if (!ingName || !ingQty) return;
     const result = await ingredientService.create({ 
@@ -103,35 +111,26 @@ export default function App() {
     }
   };
 
-  // --- LOGIQUE IA ---
-  const mealTypes = [
-    { id: 'breakfast', label: 'Petit-déj', emoji: '🍳' },
-    { id: 'lunch', label: 'Déjeuner', emoji: '🥗' },
-    { id: 'snack', label: 'Goûter', emoji: '🍎' },
-    { id: 'dinner', label: 'Dîner', emoji: '🍲' },
-  ];
-
   const handleGenerateRecipes = async (selectedIngs, selectedEqs) => {
     setLoading(true);
     try {
       const selection = {
         ingredients: selectedIngs,
         equipment: selectedEqs,
-        meal_type: selectedMealType
+        meal_type: selectedMealType,
+        lang: language
       };
 
       const data = await aiService.getSuggestions(selection);
       setSuggestions(data.suggestions);
       setCurrentScreen('suggestions');
-      setModalVisible(false); // On ferme la modal après succès
     } catch (e) {
       Alert.alert("Erreur", "L'IA n'a pas pu mijoter vos idées.");
     } finally {
       setLoading(false);
     }
   };
-
-  // NOUVEAU : Récupérer les détails d'une recette
+// Récupérer les détails d'une recette
   const handleViewRecipe = async (title) => {
     setLoadingRecipe(true);
     setModalVisible(true);
@@ -148,7 +147,6 @@ export default function App() {
 
   const handleSaveFavorite = async () => {
     if (!selectedRecipe) return;
-    
     try {
       await aiService.saveFavorite(selectedRecipe);
       Alert.alert("Succès !", "La recette a été ajoutée à tes favoris ❤️");
@@ -167,9 +165,9 @@ export default function App() {
   };
 
   const handleDeleteFavorite = async (id) => {
-    console.log("Tentative de suppression de l'ID:", id); // Vérifie dans ton terminal si l'ID est bien un nombre
+    console.log("Tentative de suppression de l'ID:", id);
     try {
-      const result = await aiService.deleteFavorite(id);
+      await aiService.deleteFavorite(id);
       setFavorites(prev => prev.filter(fav => fav.id !== id));
     } catch (e) {
       console.error("Détail erreur suppression:", e);
@@ -183,6 +181,29 @@ export default function App() {
     setCurrentScreen('selection');
   };
 
+  const handleFinishCooking = async () => {
+    Alert.alert(
+      t('Recette terminée ? 👨‍🍳'),
+      t('Voulez-vous déduire ces ingrédients de votre réserve ?'),
+      [
+        { text: t('backBtn'), style: "cancel" },
+        { 
+          text: "Oui", 
+          onPress: async () => {
+            try {
+              const updateData = { used_ingredients: selectedRecipe.used_ingredients_list };
+              await aiService.consumeIngredients(updateData);
+              setModalVisible(false);
+              loadAllData();
+              Alert.alert("Succès", "Réserve mise à jour !");
+            } catch (e) {
+              Alert.alert("Erreur", "Échec de la mise à jour.");
+            }
+          } 
+        }
+      ]
+    );
+  };
 
   // --- RENDUS D'ÉCRANS ---
 
@@ -190,34 +211,41 @@ export default function App() {
     <View style={{ flex: 1 }}>
       <View style={styles.header}>
         <View style={styles.headerRow}>
-          <Text style={styles.title}>My Pantry</Text>
-          <TouchableOpacity 
-            style={[styles.settingsBtn, {marginRight: 10}]} 
-            onPress={() => {
-              loadFavorites();
-              setCurrentScreen('favorites');
-            }}
-          >
-            <Ionicons name="heart" size={22} color="#FF4444" />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.settingsBtn} onPress={() => setCurrentScreen('equipment')}>
-            <Ionicons name="cog-outline" size={22} color="#666" />
-          </TouchableOpacity>
+          <Text style={styles.title}>{t('pantryTitle')}</Text>
+          <View style={{flexDirection: 'row', gap: 10}}>
+            <TouchableOpacity 
+              style={styles.settingsBtn} 
+              onPress={() => { loadFavorites(); setCurrentScreen('favorites'); }}
+            >
+              <Ionicons name="heart" size={22} color="#FF4444" />
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={styles.settingsBtn} 
+              onPress={() => setLanguage(language === 'en' ? 'fr' : 'en')}
+            >
+              <Text style={{fontWeight: 'bold'}}>{language.toUpperCase()}</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.settingsBtn} onPress={() => setCurrentScreen('equipment')}>
+              <Ionicons name="cog-outline" size={22} color="#666" />
+            </TouchableOpacity>
+          </View>
         </View>
-        <Text style={styles.subtitle}>Manage your stock for AI cooking</Text>
+        <Text style={styles.subtitle}>{t('pantrySubtitle')}</Text>
       </View>
 
       <FlatList
         data={[
-          { title: 'Fresh Ingredients', data: ingredients.filter(i => !i.is_staple) },
-          { title: 'Basics & Staples', data: ingredients.filter(i => i.is_staple) }
+          { title: t('freshTitle'), data: ingredients.filter(i => !i.is_staple) },
+          { title: t('stapleTitle'), data: ingredients.filter(i => i.is_staple) }
         ]}
         contentContainerStyle={styles.listContent}
         keyExtractor={(item) => item.title}
         renderItem={({ item }) => (
           <View style={styles.sectionContainer}>
             <Text style={styles.sectionTitle}>{item.title}</Text>
-            {item.data.length === 0 ? <Text style={styles.emptyText}>Empty</Text> : 
+            {item.data.length === 0 ? <Text style={styles.emptyText}>{t('empty')}</Text> : 
               item.data.map(ing => (
                 <View key={ing.id} style={styles.card}>
                   <View>
@@ -235,7 +263,7 @@ export default function App() {
       />
       {/* BOUTON GÉNÉRER*/}
       <TouchableOpacity style={styles.generateFab} onPress={openSelectionScreen}>
-        <Text style={styles.generateFabText}>Generate Ideas</Text>
+        <Text style={styles.generateFabText}>{t('generateBtn')}</Text>
       </TouchableOpacity>
 
       <View style={styles.footer}>
@@ -247,8 +275,8 @@ export default function App() {
           ))}
         </View>
         <View style={styles.inputContainer}>
-          <TextInput style={[styles.input, { flex: 2 }]} placeholder="Ingredient..." value={ingName} onChangeText={setIngName} />
-          <TextInput style={[styles.input, { flex: 1 }]} placeholder="Qty" keyboardType="numeric" value={ingQty} onChangeText={setIngQty} />
+          <TextInput style={[styles.input, { flex: 2 }]} placeholder={t('addIngPlaceholder')} value={ingName} onChangeText={setIngName} />
+          <TextInput style={[styles.input, { flex: 1 }]} placeholder={t('qtyPlaceholder')} keyboardType="numeric" value={ingQty} onChangeText={setIngQty} />
           <TouchableOpacity style={styles.addButton} onPress={handleAddIngredient}>
             <Ionicons name="add" size={24} color="white" />
           </TouchableOpacity>
@@ -260,8 +288,8 @@ export default function App() {
   const renderEquipment = () => (
     <View style={{ flex: 1 }}>
       <View style={styles.header}>
-        <Text style={styles.title}>Kitchen Tools</Text>
-        <Text style={styles.subtitle}>Select or add what you have at home</Text>
+        <Text style={styles.title}>{t('toolsTitle')}</Text>
+        <Text style={styles.subtitle}>{t('toolsSubtitle')}</Text>
       </View>
       <FlatList
         data={equipments}
@@ -279,13 +307,13 @@ export default function App() {
       />
       <View style={styles.footer}>
         <View style={styles.inputContainer}>
-          <TextInput style={[styles.input, { flex: 1 }]} placeholder="Add tool (Oven, Pan...)" value={eqName} onChangeText={setEqName} />
+          <TextInput style={[styles.input, { flex: 1 }]} placeholder={t('addTool')} value={eqName} onChangeText={setEqName} />
           <TouchableOpacity style={styles.addButton} onPress={handleAddEquipment}>
             <Ionicons name="add" size={24} color="white" />
           </TouchableOpacity>
         </View>
         <TouchableOpacity style={styles.doneBtn} onPress={() => setCurrentScreen('pantry')}>
-          <Text style={styles.doneBtnText}>Go to Pantry</Text>
+          <Text style={styles.doneBtnText}>{t('GoPantry')}</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -294,10 +322,9 @@ export default function App() {
   const renderFavorites = () => (
     <View style={{ flex: 1 }}>
       <View style={styles.header}>
-        <Text style={styles.title}>❤️ Mes Favoris</Text>
-        <Text style={styles.subtitle}>Tes recettes sauvegardées</Text>
+        <Text style={styles.title}>❤️ {t('favoritesTitle')}</Text>
+        <Text style={styles.subtitle}>{t('favoritesSubtitle')}</Text>
       </View>
-
       <FlatList
         data={favorites}
         keyExtractor={(item) => item.id.toString()}
@@ -306,36 +333,26 @@ export default function App() {
           <View style={styles.recipeCard}>
             <View style={styles.recipeHeader}>
               <Text style={styles.recipeTitle}>{item.title}</Text>
-              {/* ICI SE TROUVE LA SUPPRESSION */}
               <TouchableOpacity onPress={() => handleDeleteFavorite(item.id)}>
                 <Ionicons name="trash" size={22} color="#FF4444" />
               </TouchableOpacity>
             </View>
-
             <Text style={styles.recipeDesc} numberOfLines={2}>
               {item.details.ingredients.length} ingrédients • {item.details.prep_time}
             </Text>
-
-  
             <TouchableOpacity 
               style={styles.recipeBtn} 
-              onPress={() => {
-                setSelectedRecipe(item.details); // On réutilise la modal existante !
-                setModalVisible(true);
-              }}
+              onPress={() => { setSelectedRecipe(item.details); setModalVisible(true); }}
             >
-              <Text style={styles.recipeBtnText}>Voir la recette</Text>
+              <Text style={styles.recipeBtnText}>{t('ViewRecipe')}</Text>
             </TouchableOpacity>
           </View>
         )}
-        ListEmptyComponent={
-          <Text style={styles.emptyText}>Aucun favori pour le moment.</Text>
-        }
+        ListEmptyComponent={<Text style={styles.emptyText}>{t('Nofavorites')}</Text>}
       />
-
       <TouchableOpacity style={styles.backFab} onPress={() => setCurrentScreen('pantry')}>
         <Ionicons name="arrow-back" size={20} color="white" />
-        <Text style={{color: 'white', fontWeight: '700', marginLeft: 8}}>Retour</Text>
+        <Text style={{color: 'white', fontWeight: '700', marginLeft: 8}}>{t('backBtn')}</Text>
       </TouchableOpacity>
     </View>
   );
@@ -343,32 +360,33 @@ export default function App() {
   const renderSuggestions = () => (
     <View style={{ flex: 1 }}>
       <View style={styles.header}>
-        <Text style={styles.title}>AI Suggestions</Text>
-        <Text style={styles.subtitle}>Recipes matching your inventory</Text>
+        <Text style={styles.title}>{t('AISuggestions')}</Text>
+        <Text style={styles.subtitle}>{t('RecipesMatchingInventory')}</Text>
       </View>
       <FlatList
         data={suggestions}
-        keyExtractor={(item) => item.id.toString()}
+        keyExtractor={(item, index) => item?.id ? item.id.toString() : index.toString()}
         contentContainerStyle={styles.listContent}
         renderItem={({ item }) => (
           <View style={styles.recipeCard}>
             <View style={styles.recipeHeader}>
-              <Text style={styles.recipeTitle}>{item.title}</Text>
-              <Text style={styles.recipeScore}>{item.score}</Text>
+              <Text style={styles.recipeTitle}>{item?.title || t('RecipeWithoutName')}</Text>
+              <Text style={styles.recipeScore}>{item?.score || "N/A"}</Text>
             </View>
-            <Text style={styles.recipeDesc}>{item.description}</Text>
+            <Text style={styles.recipeDesc}>{item?.description || t('NoDescription')}</Text>
             <TouchableOpacity 
               style={styles.recipeBtn} 
-              onPress={() => handleViewRecipe(item.title)}
+              onPress={() => handleViewRecipe(item?.title)}
             >
-              <Text style={styles.recipeBtnText}>Let's get started</Text>
+              <Text style={styles.recipeBtnText}>{t('LetsGetStarted')}</Text>
             </TouchableOpacity>
           </View>
         )}
+        ListEmptyComponent={<Text style={styles.emptyText}>{t('NoSuggestionsFound')}</Text>}
       />
       <TouchableOpacity style={styles.backFab} onPress={() => setCurrentScreen('pantry')}>
         <Ionicons name="arrow-back" size={20} color="white" />
-        <Text style={{color: 'white', fontWeight: '700', marginLeft: 8}}>Back</Text>
+        <Text style={{color: 'white', fontWeight: '700', marginLeft: 8}}>{t('backBtn')}</Text>
       </TouchableOpacity>
     </View>
   );
@@ -379,25 +397,25 @@ export default function App() {
         <TouchableOpacity onPress={() => setCurrentScreen('pantry')} style={{marginBottom: 10}}>
           <Ionicons name="arrow-back" size={24} color="#1A1A1A" />
         </TouchableOpacity>
-        <Text style={styles.title}>Ma Sélection 🍳</Text>
-        <Text style={styles.subtitle}>Personnalisez avant de cuisiner</Text>
+        <Text style={styles.title}>{t('MySelection')}</Text>
+        <Text style={styles.subtitle}>{t('CustomizeBeforeCooking')}</Text>
       </View>
 
       <ScrollView contentContainerStyle={styles.listContent} showsVerticalScrollIndicator={false}>
-        <Text style={styles.miniTitle}>Moment de la journée</Text>
+        <Text style={styles.miniTitle}>{t('TimeDay')}</Text>
         <View style={styles.chipContainer}>
-          {['Petit-déjeuner', 'Déjeuner', 'Goûter', 'Dîner'].map(type => (
+          {['breakfast', 'lunch', 'snack', 'dinner'].map(type => (
             <TouchableOpacity 
               key={type} 
               style={[styles.chip, selectedMealType === type && styles.chipActive]}
               onPress={() => setSelectedMealType(type)}
             >
-              <Text style={[styles.chipText, selectedMealType === type && styles.chipTextActive]}>{type}</Text>
+              <Text style={[styles.chipText, selectedMealType === type && styles.chipTextActive]}>{t(type)}</Text>
             </TouchableOpacity>
           ))}
         </View>
 
-        <Text style={styles.miniTitle}>Ingrédients ({selectedIngredients.length})</Text>
+        <Text style={styles.miniTitle}>{t('addIngPlaceholder')} ({selectedIngredients.length})</Text>
         <View style={styles.chipContainer}>
           {ingredients.map(ing => (
             <TouchableOpacity 
@@ -414,7 +432,7 @@ export default function App() {
           ))}
         </View>
 
-        <Text style={styles.miniTitle}>Matériel ({selectedEquipments.length})</Text>
+        <Text style={styles.miniTitle}>{t('Equipment')} ({selectedEquipments.length})</Text>
         <View style={styles.chipContainer}>
           {equipments.filter(e => e.is_active).map(eq => (
             <TouchableOpacity 
@@ -438,7 +456,7 @@ export default function App() {
           style={styles.launchBtn} 
           onPress={() => handleGenerateRecipes(selectedIngredients, selectedEquipments)}
         >
-          <Text style={styles.launchBtnText}>Lancer le Chef IA ✨</Text>
+          <Text style={styles.launchBtnText}>{t('launchChef')}</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -450,7 +468,7 @@ export default function App() {
         {loading ? (
           <View style={styles.centered}>
             <ActivityIndicator size="large" color="#1A1A1A" />
-            <Text style={styles.loadingText}>Cooking something special...</Text>
+            <Text style={styles.loadingText}>{t('CookingBtn')}</Text>
           </View>
         ) : (
           currentScreen === 'pantry' ? renderPantry() : 
@@ -459,7 +477,6 @@ export default function App() {
           currentScreen === 'suggestions' ? renderSuggestions() : 
           renderSelection()
         )}
-
         {/* MODAL POUR LE DÉTAIL DE LA RECETTE */}
         <Modal
           animationType="slide"
@@ -471,25 +488,20 @@ export default function App() {
             {loadingRecipe ? (
               <View style={styles.centered}>
                 <ActivityIndicator size="large" color="#1A1A1A" />
-                <Text style={styles.loadingText}>Rédaction de la recette...</Text>
+                <Text style={styles.loadingText}>{t('WriteRecipe')}</Text>
               </View>
             ) : selectedRecipe && (
               <ScrollView showsVerticalScrollIndicator={false}>
                 <View style={styles.modalHeader}>
                    <Text style={styles.modalTitle}>{selectedRecipe.title}</Text>
                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 15 }}>
-                      {/* BOUTON SAUVEGARDER */}
                       <TouchableOpacity onPress={handleSaveFavorite}>
                         <Ionicons name="heart-outline" size={28} color="#FF4444" />
                       </TouchableOpacity>
-
                       <TouchableOpacity onPress={() => setModalVisible(false)}>
                         <Ionicons name="close-circle" size={30} color="#DDD" />
                       </TouchableOpacity>
                     </View>
-                   <TouchableOpacity onPress={() => setModalVisible(false)}>
-                      <Ionicons name="close-circle" size={30} color="#DDD" />
-                   </TouchableOpacity>
                 </View>
 
                 <View style={styles.recipeInfoRow}>
@@ -503,12 +515,12 @@ export default function App() {
                   </View>
                 </View>
 
-                <Text style={styles.modalSectionTitle}>Ingredients</Text>
-                    {selectedRecipe.ingredients.map((ing, idx) => (
+                <Text style={styles.modalSectionTitle}>{"Ingredients"}</Text>
+                  {selectedRecipe.ingredients.map((ing, idx) => (
                   <Text key={idx} style={styles.modalIngredient}>• {ing}</Text>
                 ))}
 
-                <Text style={styles.modalSectionTitle}>Instructions</Text>
+                <Text style={styles.modalSectionTitle}>{t('Instructions')}</Text>
                 {selectedRecipe.instructions.map((step, idx) => (
                   <View key={idx} style={styles.stepRow}>
                     <View style={styles.stepNumberContainer}>
@@ -519,89 +531,12 @@ export default function App() {
                 ))}
 
                 <View style={{height: 50}} />
+                <TouchableOpacity style={styles.finishRecipeBtn} onPress={handleFinishCooking}>
+                  <Ionicons name="restaurant-outline" size={20} color="white" />
+                  <Text style={styles.finishRecipeBtnText}>{t('FinishCook')}</Text>
+                </TouchableOpacity>
               </ScrollView>
             )}
-          </View>
-        </Modal>
-
-        <Modal 
-          visible={selectionModalVisible} 
-          animationType="slide" 
-          transparent={true}
-          onRequestClose={() => setSelectionModalVisible(false)}
-        >
-          <View style={styles.overlay}>
-            <View style={[styles.selectionCard, { maxHeight: '85%' }]}>
-              {/* Barre de saisie visuelle pour fermer */}
-              <View style={{ width: 40, height: 5, backgroundColor: '#EEE', borderRadius: 10, alignSelf: 'center', marginBottom: 15 }} />
-
-              <Text style={styles.modalTitle}>Ma sélection 🍳</Text>
-
-              <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 100 }}>
-
-                {/* NOUVEAU : Sélection du type de repas */}
-                <Text style={styles.miniTitle}>Moment de la journée</Text>
-                <View style={styles.chipContainer}>
-                  {['Petit-déjeuner', 'Déjeuner', 'Goûter', 'Dîner'].map(type => (
-                    <TouchableOpacity 
-                      key={type} 
-                      style={[styles.chip, selectedMealType === type && styles.chipActive]}
-                      onPress={() => setSelectedMealType(type)}
-                    >
-                      <Text style={[styles.chipText, selectedMealType === type && styles.chipTextActive]}>{type}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-                
-                <Text style={styles.miniTitle}>Ingrédients ({selectedIngredients.length})</Text>
-                <View style={styles.chipContainer}>
-                  {ingredients.map(ing => (
-                    <TouchableOpacity 
-                      key={ing.id} 
-                      style={[styles.chip, selectedIngredients.includes(ing.name) && styles.chipActive]}
-                      onPress={() => {
-                        setSelectedIngredients(prev => 
-                          prev.includes(ing.name) ? prev.filter(i => i !== ing.name) : [...prev, ing.name]
-                        );
-                      }}
-                    >
-                      <Text style={[styles.chipText, selectedIngredients.includes(ing.name) && styles.chipTextActive]}>{ing.name}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-                
-                <Text style={styles.miniTitle}>Matériel ({selectedEquipments.length})</Text>
-                <View style={styles.chipContainer}>
-                  {equipments.filter(e => e.is_active).map(eq => (
-                    <TouchableOpacity 
-                      key={eq.id} 
-                      style={[styles.chip, selectedEquipments.includes(eq.name) && styles.chipActive]}
-                      onPress={() => {
-                        setSelectedEquipments(prev => 
-                          prev.includes(eq.name) ? prev.filter(e => e !== eq.name) : [...prev, eq.name]
-                        );
-                      }}
-                    >
-                      <Text style={[styles.chipText, selectedEquipments.includes(eq.name) && styles.chipTextActive]}>{eq.name}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </ScrollView>
-                
-              {/* Bouton fixé en bas de la carte */}
-              <View style={{ position: 'absolute', bottom: 20, left: 20, right: 20, backgroundColor: 'white', paddingTop: 10 }}>
-                <TouchableOpacity 
-                  style={styles.launchBtn} 
-                  onPress={() => {
-                    setSelectionModalVisible(false);
-                    // On envoie maintenant le mealType en plus
-                    handleGenerateRecipes(selectedIngredients, selectedEquipments, selectedMealType);
-                  }}
-                >
-                  <Text style={styles.launchBtnText}>Lancer le Chef IA ✨</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
           </View>
         </Modal>
       </KeyboardAvoidingView>
@@ -610,14 +545,13 @@ export default function App() {
 }
 
 const styles = StyleSheet.create({
-  // ... GARDE TES STYLES EXISTANTS ...
   container: { flex: 1, backgroundColor: '#FFFFFF' },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   header: { padding: 25, paddingTop: 10 },
   headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   title: { fontSize: 28, fontWeight: '800', letterSpacing: -0.5 },
   subtitle: { fontSize: 14, color: '#AAA', marginTop: 4 },
-  settingsBtn: { backgroundColor: '#F5F5F5', padding: 8, borderRadius: 12 },
+  settingsBtn: { backgroundColor: '#F5F5F5', padding: 8, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
   listContent: { paddingHorizontal: 25, paddingBottom: 180 },
   sectionContainer: { marginBottom: 25 },
   sectionTitle: { fontSize: 12, fontWeight: '700', color: '#CCC', textTransform: 'uppercase', marginBottom: 10, letterSpacing: 1 },
@@ -651,8 +585,6 @@ const styles = StyleSheet.create({
   doneBtnText: { color: '#2D5A27', fontWeight: '700' },
   emptyText: { color: '#DDD', fontStyle: 'italic', marginVertical: 10 },
   loadingText: { marginTop: 20, fontSize: 18, fontWeight: '700', color: '#1A1A1A' },
-
-  // --- NOUVEAUX STYLES POUR LA MODAL ---
   modalContent: { flex: 1, padding: 25, backgroundColor: 'white' },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 },
   modalTitle: { fontSize: 24, fontWeight: '800', width: '80%' },
@@ -661,10 +593,21 @@ const styles = StyleSheet.create({
   recipeInfoRow: { flexDirection: 'row', gap: 15 },
   infoBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F5F5F5', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, gap: 5 },
   infoBadgeText: { fontSize: 13, fontWeight: '600', color: '#666' },
-  stepRow: { flexDirection: 'row', marginBottom: 20, gap: 15 },
-  stepNumberContainer: { width: 28, height: 28, backgroundColor: '#1A1A1A', borderRadius: 14, justifyContent: 'center', alignItems: 'center' },
+  miniTitle: { fontSize: 16, fontWeight: '700', marginTop: 20, marginBottom: 10 },
+  chipContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  chip: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20, backgroundColor: '#F5F5F5', borderWidth: 1, borderColor: '#EEE' },
+  chipActive: { backgroundColor: '#1A1A1A', borderColor: '#1A1A1A' },
+  chipText: { fontSize: 13, color: '#666' },
+  chipTextActive: { color: '#FFF', fontWeight: '600' },
+  footerSelection: { padding: 20, borderTopWidth: 1, borderTopColor: '#EEE' },
+  launchBtn: { backgroundColor: '#1A1A1A', padding: 18, borderRadius: 15, alignItems: 'center' },
+  launchBtnText: { color: 'white', fontSize: 16, fontWeight: '700' },
+  finishRecipeBtn: { backgroundColor: '#4CAF50', padding: 15, borderRadius: 12, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 10 },
+  finishRecipeBtnText: { color: 'white', fontWeight: '700', fontSize: 16 },
+  stepRow: { flexDirection: 'row', marginBottom: 15, gap: 12 },
+  stepNumberContainer: { width: 28, height: 28, borderRadius: 14, backgroundColor: '#1A1A1A', justifyContent: 'center', alignItems: 'center' },
   stepNumberText: { color: 'white', fontSize: 14, fontWeight: '700' },
-  stepDescription: { flex: 1, fontSize: 15, color: '#444', lineHeight: 22 },
+  stepDescription: { flex: 1, fontSize: 15, lineHeight: 22, color: '#333' },
 
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   selectionCard: { backgroundColor: 'white', borderTopLeftRadius: 30, borderTopRightRadius: 30, padding: 25, minHeight: height * 0.7 },
@@ -750,4 +693,22 @@ const styles = StyleSheet.create({
   chipActive: { backgroundColor: '#1A1A1A', borderColor: '#1A1A1A' },
   chipText: { color: '#666', fontSize: 13, fontWeight: '600' },
   chipTextActive: { color: '#FFF' },
+
+  finishRecipeBtn: {
+    backgroundColor: '#00b894', // Un vert "succès"
+    flexDirection: 'row',
+    padding: 18,
+    borderRadius: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 30,
+    marginHorizontal: 10,
+    gap: 10,
+    elevation: 3
+  },
+  finishRecipeBtnText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '800'
+  },
 });

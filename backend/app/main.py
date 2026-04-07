@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from app import models, schemas, database
 import os
@@ -12,10 +12,7 @@ from pydantic import BaseModel
 
 load_dotenv()
 
-class SelectionRequest(BaseModel):
-    ingredients: List[str]
-    equipment: List[str]
-    meal_type: str
+
 
 SessionLocal = database.SessionLocal
 engine = database.engine
@@ -214,13 +211,15 @@ def toggle_equipment(eq_id: int, db: Session = Depends(get_db)):
 #         ]}
 
 @app.post("/generate-ideas")
-def generate_recipes(selection: SelectionRequest):    
+def generate_recipes(selection: schemas.SelectionRequest):    
     # CORRECT : On utilise la notation pointée car 'selection' est un objet
     # On accède directement aux attributs définis dans ta classe SelectionRequest
     ings_list = selection.ingredients
     eqs_list = selection.equipment
     m_type = selection.meal_type
     
+    target_lang = "French" if selection.lang == "fr" else "English"
+
     # Transformation des listes en chaînes de caractères pour le prompt
     ings = ", ".join(ings_list)
     eqs = ", ".join(eqs_list)
@@ -228,19 +227,32 @@ def generate_recipes(selection: SelectionRequest):
     if not ings:
         return {"suggestions": []}
 
-    prompt = f"""Tu es un chef cuisinier expert. 
-    Propose 3 idées de recettes en utilisant EXCLUSIVEMENT ces ingrédients : {ings}.
-    Matériel disponible : {eqs}.
-    Type de repas souhaité : {m_type}.
+    prompt = f"""You are a professional Chef. 
+    Provide 3 recipe ideas in {target_lang} using ONLY these ingredients: {ings}.
+    Available equipment: {eqs}.
+    Meal type: {m_type}.
 
-    CONSIGNES SPÉCIFIQUES :
-    1. Propose 3 recettes adaptées pour le {m_type}.
-    2. Si un ingrédient essentiel manque mais qu'un substitut logique est possible (ex: lait d'avoine à la place du lait), propose la substitution de manière explicite dans la description.
-    3. Réponds uniquement en JSON avec cette structure :
-    [
-      {{"id": 1, "title": "Nom", "description": "Brève explication", "score": "90% Match"}}
-    ]
-    Ne rajoute aucun texte avant ou après le JSON."""
+    SPECIFIC RULES:
+    1. Respond EXCLUSIVELY in JSON format.
+    2. The field 'used_ingredients_list' MUST use the EXACT names from this list: {ings}.
+    3. Réponds EXCLUSIVEMENT en JSON avec cette structure :
+    {{
+        "id": 1,
+        "title": "Recipe Name",
+        "description": "Short summary",
+        "prep_time": "20 min",
+        "ingredients": ["100g rice", "1tbsp oil"],
+        "instructions": ["Step 1", "Step 2"],
+        "used_ingredients_list": [
+          {{"name": "rice", "amount": 100}},
+          {{"name": "oil", "amount": 15}}
+      ]
+    }}
+    IMPORTANT : All text fields (title, description) must be in {target_lang}
+    The 'used_ingredients_list' field must contain the EXACT names of the ingredients in the pantry so that I can remove them.
+    The unit for 'amount' must be grams (g) or milliliters (ml). For pieces, enter the number.
+
+    Do not add any text before or after the JSON."""
 
     try:
         response = client.models.generate_content(
@@ -266,20 +278,23 @@ def get_recipe_details(title: str, db: Session = Depends(get_db)):
     # On récupère les ingrédients pour donner du contexte à l'IA
     ingredients = db.query(models.Ingredient).all()
     ing_list = ", ".join([i.name for i in ingredients])
+    lang: str = Query("en", description="Language of the recipe (fr or en)"),
+
+    lang_instruction = "Réponds exclusivement en français." if lang == "fr" else "Respond exclusively in English."
 
     prompt = f"""
-    Rédige la recette détaillée pour : "{title}".
-    Utilise prioritairement ces ingrédients : {ing_list}.
-
-    Détails avec substitutions si besoin (avec les ingrédients qui ne sont pas présentés mais d'autre sont présents)
+    {lang_instruction}
+    Task: Write a detailed recipe for: "{title}".
+    Context: Use these available ingredients primarily: {ing_list}.
+    Substitutions: Suggest substitutions if some key ingredients for "{title}" are missing from the context list.
     
-    Réponds au format JSON avec cette structure :
+    JSON Structure to follow:
     {{
       "title": "{title}",
       "ingredients": ["item 1", "item 2"],
-      "instructions": ["étape 1", "étape 2"],
-      "prep_time": "15 min plus au moins",
-      "difficulty": "Facile"
+      "instructions": ["step 1", "step 2"],
+      "prep_time": "approximate duration",
+      "difficulty": "Easy/Medium/Hard"
     }}
     """
 
@@ -324,3 +339,23 @@ def delete_favorite(fav_id: int, db: Session = Depends(get_db)):
     db.commit()
     return {"message": "deleted"}
 
+@app.post("/pantry/consume")
+def consume_ingredients(data: schemas.CookingUpdate, db: Session = Depends(get_db)):
+    for item in data.used_ingredients:
+        target_name = item.get("name").strip().lower()
+        amount = item.get("amount", 0)
+        
+        # On cherche l'ingrédient en base
+        db_ing = db.query(models.Ingredient).filter(models.Ingredient.name == target_name).first()
+        
+        if db_ing:
+            if not db_ing.is_staple:
+                # Si c'est du frais, on supprime carrément
+                db.delete(db_ing)
+            else:
+                # Si c'est un staple, on réduit la quantité
+                db_ing.quantity = max(0, db_ing.quantity - amount)
+                # Optionnel : si la quantité tombe à 0, on pourrait aussi supprimer
+    
+    db.commit()
+    return {"status": "success", "message": "Pantry updated"}

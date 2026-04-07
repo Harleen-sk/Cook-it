@@ -40,7 +40,13 @@ class FavoriteRecipe(BaseModel):
     class Config:
         from_attributes = True
 
-# class SelectionRequest(BaseModel):
-#     ingredients: List[str]
-#     equipment: List[str]
+class CookingUpdate(BaseModel):
+    used_ingredients: list[dict] # format: [{"name": "Riz", "amount": 200}, ...]
+
+
+class SelectionRequest(BaseModel):
+    ingredients: List[str]
+    equipment: List[str]
+    meal_type: str
+    lang: str = "en"
 

@@ -1,4 +1,4 @@
-const API_IP = "10.110.228.127";
+const API_IP = "10.113.9.127";
 const BASE_URL = `http://${API_IP}:8000`;
 
 export const ingredientService = {
@@ -99,5 +99,19 @@ export const aiService = {
       console.error("Erreur suppression favori:", error);
       throw error;
     }
-  }
+  },
+
+  consumeIngredients: async (updateData) => {
+    try {
+      const response = await fetch(`${BASE_URL}/pantry/consume`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updateData) // Envoie {"used_ingredients": [...]}
+      });
+      return await response.json();
+    } catch (error) {
+      console.error("Erreur lors de la mise à jour du stock:", error);
+      throw error;
+    }
+  },
 };
